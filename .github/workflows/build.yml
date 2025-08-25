@@ -1,0 +1,413 @@
+name: Build bootc images per changed directory
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Platforms to build (comma-separated)'
+        required: true
+        default: 'linux/amd64,linux/arm64'
+      formats:
+        description: 'Export formats (comma-separated)'
+        required: true
+        default: 'anaconda-iso,qcow2'
+  push:
+    branches:
+      - main
+
+jobs:
+  # Setup job: Parse build parameters + detect changed directories
+  setup:
+    name: Setup build parameters
+    runs-on: ubuntu-latest
+    outputs:
+      platforms: ${{ steps.setup.outputs.platforms }}
+      formats: ${{ steps.setup.outputs.formats }}
+      matrix: ${{ steps.setup.outputs.matrix }}
+      dirs: ${{ steps.setup.outputs.dirs }}
+      has_dirs: ${{ steps.setup.outputs.has_dirs }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup build parameters & detect changed directories
+        id: setup
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Inputs or defaults
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PLATFORMS="${{ github.event.inputs.platforms }}"
+            FORMATS="${{ github.event.inputs.formats }}"
+          else
+            PLATFORMS="linux/amd64,linux/arm64"
+            FORMATS="anaconda-iso,qcow2"
+          fi
+
+          echo "platforms=$PLATFORMS" >> "$GITHUB_OUTPUT"
+          echo "formats=$FORMATS" >> "$GITHUB_OUTPUT"
+
+          echo "Building for platforms: $PLATFORMS"
+          echo "Building formats: $FORMATS"
+
+          # Detect changed top-level directories between the previous and current commit (push)
+          # and for workflow_dispatch, consider ALL top-level dirs that contain a Containerfile.
+          if [ "${{ github.event_name }}" = "push" ]; then
+            BEFORE="${{ github.event.before }}"
+            AFTER="${{ github.sha }}"
+            echo "Diff range: $BEFORE..$AFTER"
+            CHANGED_DIRS=$(git diff --name-status "$BEFORE" "$AFTER" | awk '{print $2}' | awk -F/ 'NF>1{print $1}' | sort -u)
+          else
+            # For manual runs, find all top-level dirs with a Containerfile
+            CHANGED_DIRS=$(find . -maxdepth 2 -type f -name 'Containerfile' -printf '%h\n' | sed 's#^\./##' | awk -F/ '{print $1}' | sort -u)
+          fi
+
+          echo "Changed top-level dirs (raw): $CHANGED_DIRS"
+
+          # Keep only those that currently exist AND contain a Containerfile
+          BUILD_DIRS=()
+          for d in $CHANGED_DIRS; do
+            if [ -f "$d/Containerfile" ]; then
+              BUILD_DIRS+=("$d")
+            else
+              echo "Skipping $d (no Containerfile or directory deleted)"
+            fi
+          done
+
+          if [ ${#BUILD_DIRS[@]} -eq 0 ]; then
+            echo "No buildable directories detected. The workflow will skip build & manifest steps."
+            echo 'has_dirs=false' >> "$GITHUB_OUTPUT"
+            echo 'dirs=[]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'has_dirs=true' >> "$GITHUB_OUTPUT"
+            # JSON array of directories for later jobs
+            printf 'dirs=[' >> "$GITHUB_OUTPUT"
+            for i in "${!BUILD_DIRS[@]}"; do
+              [ $i -gt 0 ] && printf ',' >> "$GITHUB_OUTPUT"
+              printf '"%s"' "${BUILD_DIRS[$i]}" >> "$GITHUB_OUTPUT"
+            done
+            printf ']\n' >> "$GITHUB_OUTPUT"
+          fi
+
+          # Build the cross-product matrix (platform Ã— directory)
+          MATRIX='{"include":['
+          IFS=',' read -ra PLATFORM_ARRAY <<< "$PLATFORMS"
+
+          first=1
+          for PLATFORM in "${PLATFORM_ARRAY[@]}"; do
+            ARCH="${PLATFORM#linux/}"
+            if [ "$ARCH" = "arm64" ]; then
+              RUNNER="ubuntu-24.04-arm"
+            else
+              RUNNER="ubuntu-latest"
+            fi
+
+            for DIR in "${BUILD_DIRS[@]:-}"; do
+              [ -z "$DIR" ] && continue
+              if [ $first -eq 0 ]; then MATRIX+=" ,"; fi
+              first=0
+              MATRIX+="{\"platform\":\"$PLATFORM\",\"arch\":\"$ARCH\",\"runner\":\"$RUNNER\",\"dir\":\"$DIR\"}"
+            done
+          done
+          MATRIX+=']}'
+
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "Matrix: $MATRIX"
+
+  # Matrix job: Build the bootc image for each (directory, platform)
+  build-image:
+    name: Build ${{ matrix.dir }} (${{ matrix.arch }})
+    needs: setup
+    if: needs.setup.outputs.has_dirs == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+      tags: ${{ steps.build.outputs.tags }}
+    env:
+      # Disable Subscription Manager container passthrough
+      SMDEV_CONTAINER_OFF: 1
+      # Source registry for base image
+      SOURCE_REGISTRY_HOST: "registry.redhat.io"
+
+      # Destination registry configuration (image name will be per-directory)
+      DEST_REGISTRY_HOST: "${{ vars.DEST_REGISTRY_HOST || 'ghcr.io' }}"
+      DEST_REGISTRY_USER: "${{ vars.DEST_REGISTRY_USER || github.repository_owner }}"
+      DEST_REGISTRY_PASSWORD: "${{ secrets.DEST_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}"
+    container:
+      image: registry.access.redhat.com/ubi9/ubi
+      options: --privileged
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get container tools in UBI builder
+        run: dnf -y install podman buildah skopeo jq
+
+      - name: Register with Red Hat subscription manager
+        run: |
+          if [ -n "${{ secrets.RHT_ORGID }}" ] && [ -n "${{ secrets.RHT_ACT_KEY }}" ]; then
+            echo "Registering with organization ID and activation key..."
+            subscription-manager register --org=${{ secrets.RHT_ORGID }} --activationkey=${{ secrets.RHT_ACT_KEY }}
+          else
+            echo "Registering with username and password..."
+            subscription-manager register --username=${{ secrets.RH_USERNAME }} --password=${{ secrets.RH_PASSWORD }}
+          fi
+
+      # workaround for https://github.com/redhat-actions/podman-login/issues/42
+      - name: Workaround open podman-login action issue
+        env:
+          auth: "{ \"auths\": {} }"
+        run: |
+          mkdir -p $HOME/.docker
+          echo "$auth" > $HOME/.docker/config.json
+
+      - name: Log in to Red Hat Registry
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ${{ env.SOURCE_REGISTRY_HOST }}
+          username: ${{ secrets.SOURCE_REGISTRY_USER || secrets.RH_USERNAME }}
+          password: ${{ secrets.SOURCE_REGISTRY_PASSWORD || secrets.RH_PASSWORD }}
+          auth_file_path: /run/containers/0/auth.json
+
+      - name: Compute semantic version tag (vN) for ${{ matrix.dir }}
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          
+          IMAGE_NAME="bootc-${{ matrix.dir }}"
+          IMAGE_BASE="${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/${IMAGE_NAME}"
+          
+          echo "Determining version for: $IMAGE_BASE"
+          
+          # Get existing tags from the registry using skopeo
+          EXISTING_TAGS=""
+          if skopeo list-tags "docker://${IMAGE_BASE}" >/tmp/tags.json 2>/dev/null; then
+            EXISTING_TAGS=$(jq -r '.Tags[]' /tmp/tags.json 2>/dev/null | \
+              grep -oE '^v[0-9]+$' | \
+              sort -V || echo "")
+            echo "Found existing tags: $EXISTING_TAGS"
+          else
+            echo "No existing tags found or repository doesn't exist yet"
+          fi
+          
+          if [ -z "$EXISTING_TAGS" ]; then
+            echo "No existing version tags found, starting with v1"
+            NEXT_TAG="v1"
+          else
+            # Find the highest version number
+            HIGHEST_VERSION=$(echo "$EXISTING_TAGS" | tail -n1)
+            HIGHEST_NUM=$(echo "$HIGHEST_VERSION" | sed 's/v//')
+            NEXT_NUM=$((HIGHEST_NUM + 1))
+            NEXT_TAG="v${NEXT_NUM}"
+            echo "Highest existing version: $HIGHEST_VERSION, next version: $NEXT_TAG"
+          fi
+          
+          echo "NEXT_TAG=$NEXT_TAG" | tee -a "$GITHUB_ENV"
+          echo "next=$NEXT_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Build platform-specific image with Buildah
+        id: build
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ${{ env.DEST_REGISTRY_USER }}/bootc-${{ matrix.dir }}
+          tags: |
+            latest-${{ matrix.arch }}
+            ${{ github.sha }}-${{ matrix.arch }}
+            ${{ steps.version.outputs.next }}-${{ matrix.arch }}
+          platforms: ${{ matrix.platform }}
+          context: ./${{ matrix.dir }}
+          containerfiles: |
+            ./${{ matrix.dir }}/Containerfile
+
+      - name: Log in to GitHub Container Registry
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ${{ env.DEST_REGISTRY_HOST }}
+          username: ${{ env.DEST_REGISTRY_USER }}
+          password: ${{ env.DEST_REGISTRY_PASSWORD }}
+          auth_file_path: /run/containers/0/auth.json
+
+      - name: Push platform-specific image to GHCR
+        id: push
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build.outputs.image }}
+          tags: ${{ steps.build.outputs.tags }}
+          registry: ${{ env.DEST_REGISTRY_HOST }}
+
+      - name: Clean up the subscription
+        if: always()
+        run: subscription-manager unregister
+
+  # Job: Create multi-platform manifests for each changed directory
+  create-manifest:
+    name: Create multi-platform manifests
+    needs: [setup, build-image]
+    if: needs.setup.outputs.has_dirs == 'true'
+    runs-on: ubuntu-latest
+    env:
+      DEST_REGISTRY_HOST: "${{ vars.DEST_REGISTRY_HOST || 'ghcr.io' }}"
+      DEST_REGISTRY_USER: "${{ vars.DEST_REGISTRY_USER || github.repository_owner }}"
+      DEST_REGISTRY_PASSWORD: "${{ secrets.DEST_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}"
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ${{ env.DEST_REGISTRY_HOST }}
+          username: ${{ env.DEST_REGISTRY_USER }}
+          password: ${{ env.DEST_REGISTRY_PASSWORD }}
+
+      - name: Install skopeo for version computation
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+
+      - name: Create and push multi-platform manifests per directory
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          IFS=',' read -ra PLATFORM_ARRAY <<< "${{ needs.setup.outputs.platforms }}"
+
+          # Iterate directories detected in setup (JSON array)
+          DIRS_JSON='${{ needs.setup.outputs.dirs }}'
+          echo "Directories to process: $DIRS_JSON"
+
+          # Convert JSON array to bash array
+          DIRS_CLEAN=$(echo "$DIRS_JSON" | sed 's/\[//g; s/\]//g; s/"//g')
+          IFS=',' read -ra DIRS <<< "$DIRS_CLEAN"
+
+          for DIR in "${DIRS[@]}"; do
+            IMAGE_BASE="${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-$DIR"
+
+            echo "\n=== Processing bootc-$DIR ==="
+            
+            # Compute the SAME version that was used in the build step
+            # This must match exactly what the build step computed
+            EXISTING_TAGS=""
+            if skopeo list-tags "docker://${IMAGE_BASE}" >/tmp/tags.json 2>/dev/null; then
+              # Filter out platform-specific tags to get only base version tags
+              EXISTING_TAGS=$(jq -r '.Tags[]' /tmp/tags.json 2>/dev/null | \
+                grep -oE '^v[0-9]+$' | \
+                sort -V || echo "")
+              echo "Found existing base version tags: $EXISTING_TAGS"
+            else
+              echo "No existing tags found"
+            fi
+            
+            if [ -z "$EXISTING_TAGS" ]; then
+              echo "No existing version tags found, using v1"
+              VERSION_TAG="v1"
+            else
+              # Find the highest version number
+              HIGHEST_VERSION=$(echo "$EXISTING_TAGS" | tail -n1)
+              HIGHEST_NUM=$(echo "$HIGHEST_VERSION" | sed 's/v//')
+              # The current version should be the highest existing + 1
+              # But since build jobs already pushed vN-arch tags, we need to find
+              # the version that was actually used
+              
+              # Check if platform-specific tags exist for this version
+              CURRENT_VERSION="v$((HIGHEST_NUM + 1))"
+              if skopeo inspect "docker://${IMAGE_BASE}:${CURRENT_VERSION}-amd64" >/dev/null 2>&1 || \
+                skopeo inspect "docker://${IMAGE_BASE}:${CURRENT_VERSION}-arm64" >/dev/null 2>&1; then
+                VERSION_TAG="$CURRENT_VERSION"
+                echo "Found platform-specific tags for $CURRENT_VERSION, using that version"
+              else
+                # Fallback to the highest existing base version
+                VERSION_TAG="$HIGHEST_VERSION"
+                echo "No platform-specific tags found for incremented version, using highest existing: $VERSION_TAG"
+              fi
+            fi
+            
+            LATEST_MANIFEST="$IMAGE_BASE:latest"
+            SHA_MANIFEST="$IMAGE_BASE:${{ github.sha }}"
+            VERSION_MANIFEST="$IMAGE_BASE:$VERSION_TAG"
+
+            echo "Creating manifests: $LATEST_MANIFEST, $SHA_MANIFEST, $VERSION_MANIFEST"
+
+            # Remove existing manifests if they exist
+            podman manifest rm "$LATEST_MANIFEST" 2>/dev/null || true
+            podman manifest rm "$SHA_MANIFEST" 2>/dev/null || true
+            podman manifest rm "$VERSION_MANIFEST" 2>/dev/null || true
+
+            # Create new manifests
+            podman manifest create "$LATEST_MANIFEST"
+            podman manifest create "$SHA_MANIFEST"
+            podman manifest create "$VERSION_MANIFEST"
+
+            for PLATFORM in "${PLATFORM_ARRAY[@]}"; do
+              ARCH="${PLATFORM#linux/}"
+              PLATFORM_LATEST="$IMAGE_BASE:latest-$ARCH"
+              PLATFORM_SHA="$IMAGE_BASE:${{ github.sha }}-$ARCH"
+              PLATFORM_VER="$IMAGE_BASE:$VERSION_TAG-$ARCH"
+
+              echo "  Adding $PLATFORM_LATEST to latest manifest"
+              echo "  Adding $PLATFORM_SHA to SHA manifest"
+              echo "  Adding $PLATFORM_VER to version manifest ($VERSION_TAG)"
+
+              podman manifest add --arch "$ARCH" --os linux "$LATEST_MANIFEST" "docker://$PLATFORM_LATEST"
+              podman manifest add --arch "$ARCH" --os linux "$SHA_MANIFEST" "docker://$PLATFORM_SHA"
+              podman manifest add --arch "$ARCH" --os linux "$VERSION_MANIFEST" "docker://$PLATFORM_VER"
+            done
+
+            echo "Inspecting created manifests for $DIR..."
+            podman manifest inspect "$LATEST_MANIFEST" >/dev/null
+            podman manifest inspect "$SHA_MANIFEST" >/dev/null
+            podman manifest inspect "$VERSION_MANIFEST" >/dev/null
+
+            echo "Pushing manifests for $DIR..."
+            podman manifest push --all "$LATEST_MANIFEST" "docker://$LATEST_MANIFEST"
+            podman manifest push --all "$SHA_MANIFEST" "docker://$SHA_MANIFEST"
+            podman manifest push --all "$VERSION_MANIFEST" "docker://$VERSION_MANIFEST"
+
+            echo "Done: $DIR (latest, ${{ github.sha }}, $VERSION_TAG)"
+          done
+
+  # Summary job
+  summary:
+    name: Build Summary
+    needs: [setup, build-image, create-manifest]
+    runs-on: ubuntu-latest
+    if: always()
+    env:
+      DEST_REGISTRY_HOST: "${{ vars.DEST_REGISTRY_HOST || 'ghcr.io' }}"
+      DEST_REGISTRY_USER: "${{ vars.DEST_REGISTRY_USER || github.repository_owner }}"
+    steps:
+      - name: Print build summary
+        shell: bash
+        run: |
+          echo "## Build Summary" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ needs.setup.outputs.has_dirs }}" != "true" ]; then
+            echo "No buildable directory changes detected in this run." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "### Platforms" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ${{ needs.setup.outputs.platforms }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          DIRS_JSON='${{ needs.setup.outputs.dirs }}'
+          # Remove brackets and quotes, split by comma
+          DIRS_CLEAN=$(echo "$DIRS_JSON" | sed 's/\[//g; s/\]//g; s/"//g')
+          IFS=',' read -ra DIRS <<< "$DIRS_CLEAN"
+
+          echo "### Images" >> "$GITHUB_STEP_SUMMARY"
+          for DIR in "${DIRS[@]}"; do
+            echo "- $DIR: ${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-$DIR:{latest | ${{ github.sha }} | vN}" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Notes" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Only directories with a Containerfile that changed (or whose contents changed) are built." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Deleted directories are ignored gracefully (no build attempted)." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Version tags are created as vN (and vN-<arch> for platform images)." >> "$GITHUB_STEP_SUMMARY"
