@@ -53,6 +53,24 @@ jobs:
           echo "Building for platforms: $PLATFORMS"
           echo "Building formats: $FORMATS"
 
+          # Function to get allowed platforms for a directory
+          get_allowed_platforms() {
+            local dir="$1"
+            local default_platforms="$2"
+            
+            if [ -f "$dir/.buildconfig" ]; then
+              # Parse .buildconfig file for platforms
+              local config_platforms=$(grep -E '^platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^platforms\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ')
+              if [ -n "$config_platforms" ]; then
+                echo "$config_platforms"
+                return
+              fi
+            fi
+            
+            # Return default platforms if no restriction found
+            echo "$default_platforms"
+          }
+
           # Detect changed top-level directories between the previous and current commit (push)
           # and for workflow_dispatch, consider ALL top-level dirs that contain a Containerfile.
           if [ "${{ github.event_name }}" = "push" ]; then
@@ -92,22 +110,43 @@ jobs:
             printf ']\n' >> "$GITHUB_OUTPUT"
           fi
 
-          # Build the cross-product matrix (platform Ã— directory)
+          # Build the cross-product matrix (platform × directory) with architecture restrictions
           MATRIX='{"include":['
           IFS=',' read -ra PLATFORM_ARRAY <<< "$PLATFORMS"
 
           first=1
-          for PLATFORM in "${PLATFORM_ARRAY[@]}"; do
-            ARCH="${PLATFORM#linux/}"
-            if [ "$ARCH" = "arm64" ]; then
-              RUNNER="ubuntu-24.04-arm"
-            else
-              RUNNER="ubuntu-latest"
-            fi
+          for DIR in "${BUILD_DIRS[@]:-}"; do
+            [ -z "$DIR" ] && continue
+            
+            # Get allowed platforms for this directory
+            ALLOWED_PLATFORMS=$(get_allowed_platforms "$DIR" "$PLATFORMS")
+            echo "Directory $DIR allowed platforms: $ALLOWED_PLATFORMS"
+            
+            IFS=',' read -ra ALLOWED_PLATFORM_ARRAY <<< "$ALLOWED_PLATFORMS"
+            
+            for PLATFORM in "${ALLOWED_PLATFORM_ARRAY[@]}"; do
+              # Check if this platform is in the global platform list
+              PLATFORM_FOUND=false
+              for GLOBAL_PLATFORM in "${PLATFORM_ARRAY[@]}"; do
+                if [ "$PLATFORM" = "$GLOBAL_PLATFORM" ]; then
+                  PLATFORM_FOUND=true
+                  break
+                fi
+              done
+              
+              if [ "$PLATFORM_FOUND" = false ]; then
+                echo "Platform $PLATFORM for $DIR not in global platform list, skipping"
+                continue
+              fi
+              
+              ARCH="${PLATFORM#linux/}"
+              if [ "$ARCH" = "arm64" ]; then
+                RUNNER="ubuntu-24.04-arm"
+              else
+                RUNNER="ubuntu-latest"
+              fi
 
-            for DIR in "${BUILD_DIRS[@]:-}"; do
-              [ -z "$DIR" ] && continue
-              if [ $first -eq 0 ]; then MATRIX+=" ,"; fi
+              if [ $first -eq 0 ]; then MATRIX+=","; fi
               first=0
               MATRIX+="{\"platform\":\"$PLATFORM\",\"arch\":\"$ARCH\",\"runner\":\"$RUNNER\",\"dir\":\"$DIR\"}"
             done
@@ -260,6 +299,9 @@ jobs:
       DEST_REGISTRY_USER: "${{ vars.DEST_REGISTRY_USER || github.repository_owner }}"
       DEST_REGISTRY_PASSWORD: "${{ secrets.DEST_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}"
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Log in to GitHub Container Registry
         uses: redhat-actions/podman-login@v1
         with:
@@ -277,7 +319,25 @@ jobs:
         run: |
           set -euo pipefail
 
-          IFS=',' read -ra PLATFORM_ARRAY <<< "${{ needs.setup.outputs.platforms }}"
+          # Function to get allowed platforms for a directory
+          get_allowed_platforms() {
+            local dir="$1"
+            local default_platforms="$2"
+            
+            if [ -f "$dir/.buildconfig" ]; then
+              # Parse .buildconfig file for platforms
+              local config_platforms=$(grep -E '^platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^platforms\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ')
+              if [ -n "$config_platforms" ]; then
+                echo "$config_platforms"
+                return
+              fi
+            fi
+            
+            # Return default platforms if no restriction found
+            echo "$default_platforms"
+          }
+
+          IFS=',' read -ra GLOBAL_PLATFORM_ARRAY <<< "${{ needs.setup.outputs.platforms }}"
 
           # Iterate directories detected in setup (JSON array)
           DIRS_JSON='${{ needs.setup.outputs.dirs }}'
@@ -291,6 +351,36 @@ jobs:
             IMAGE_BASE="${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-$DIR"
 
             echo "\n=== Processing bootc-$DIR ==="
+            
+            # Get allowed platforms for this directory
+            ALLOWED_PLATFORMS=$(get_allowed_platforms "$DIR" "${{ needs.setup.outputs.platforms }}")
+            echo "Directory $DIR allowed platforms: $ALLOWED_PLATFORMS"
+            
+            # Filter allowed platforms to only include those that were actually built
+            IFS=',' read -ra ALLOWED_PLATFORM_ARRAY <<< "$ALLOWED_PLATFORMS"
+            BUILT_PLATFORMS=()
+            
+            for PLATFORM in "${ALLOWED_PLATFORM_ARRAY[@]}"; do
+              # Check if this platform is in the global platform list
+              PLATFORM_FOUND=false
+              for GLOBAL_PLATFORM in "${GLOBAL_PLATFORM_ARRAY[@]}"; do
+                if [ "$PLATFORM" = "$GLOBAL_PLATFORM" ]; then
+                  PLATFORM_FOUND=true
+                  break
+                fi
+              done
+              
+              if [ "$PLATFORM_FOUND" = true ]; then
+                BUILT_PLATFORMS+=("$PLATFORM")
+              fi
+            done
+            
+            if [ ${#BUILT_PLATFORMS[@]} -eq 0 ]; then
+              echo "No valid platforms found for $DIR, skipping manifest creation"
+              continue
+            fi
+            
+            echo "Creating manifests for platforms: ${BUILT_PLATFORMS[*]}"
             
             # Compute the SAME version that was used in the build step
             # This must match exactly what the build step computed
@@ -318,8 +408,16 @@ jobs:
               
               # Check if platform-specific tags exist for this version
               CURRENT_VERSION="v$((HIGHEST_NUM + 1))"
-              if skopeo inspect "docker://${IMAGE_BASE}:${CURRENT_VERSION}-amd64" >/dev/null 2>&1 || \
-                skopeo inspect "docker://${IMAGE_BASE}:${CURRENT_VERSION}-arm64" >/dev/null 2>&1; then
+              VERSION_FOUND=false
+              for PLATFORM in "${BUILT_PLATFORMS[@]}"; do
+                ARCH="${PLATFORM#linux/}"
+                if skopeo inspect "docker://${IMAGE_BASE}:${CURRENT_VERSION}-${ARCH}" >/dev/null 2>&1; then
+                  VERSION_FOUND=true
+                  break
+                fi
+              done
+              
+              if [ "$VERSION_FOUND" = true ]; then
                 VERSION_TAG="$CURRENT_VERSION"
                 echo "Found platform-specific tags for $CURRENT_VERSION, using that version"
               else
@@ -345,7 +443,7 @@ jobs:
             podman manifest create "$SHA_MANIFEST"
             podman manifest create "$VERSION_MANIFEST"
 
-            for PLATFORM in "${PLATFORM_ARRAY[@]}"; do
+            for PLATFORM in "${BUILT_PLATFORMS[@]}"; do
               ARCH="${PLATFORM#linux/}"
               PLATFORM_LATEST="$IMAGE_BASE:latest-$ARCH"
               PLATFORM_SHA="$IMAGE_BASE:${{ github.sha }}-$ARCH"
@@ -383,16 +481,37 @@ jobs:
       DEST_REGISTRY_HOST: "${{ vars.DEST_REGISTRY_HOST || 'ghcr.io' }}"
       DEST_REGISTRY_USER: "${{ vars.DEST_REGISTRY_USER || github.repository_owner }}"
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Print build summary
         shell: bash
         run: |
+          # Function to get allowed platforms for a directory
+          get_allowed_platforms() {
+            local dir="$1"
+            local default_platforms="$2"
+            
+            if [ -f "$dir/.buildconfig" ]; then
+              # Parse .buildconfig file for platforms
+              local config_platforms=$(grep -E '^platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^platforms\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ')
+              if [ -n "$config_platforms" ]; then
+                echo "$config_platforms"
+                return
+              fi
+            fi
+            
+            # Return default platforms if no restriction found
+            echo "$default_platforms"
+          }
+
           echo "## Build Summary" >> "$GITHUB_STEP_SUMMARY"
           if [ "${{ needs.setup.outputs.has_dirs }}" != "true" ]; then
             echo "No buildable directory changes detected in this run." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
-          echo "### Platforms" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Global Platforms" >> "$GITHUB_STEP_SUMMARY"
           echo "- ${{ needs.setup.outputs.platforms }}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
@@ -403,7 +522,12 @@ jobs:
 
           echo "### Images" >> "$GITHUB_STEP_SUMMARY"
           for DIR in "${DIRS[@]}"; do
-            echo "- $DIR: ${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-$DIR:{latest | ${{ github.sha }} | vN}" >> "$GITHUB_STEP_SUMMARY"
+            ALLOWED_PLATFORMS=$(get_allowed_platforms "$DIR" "${{ needs.setup.outputs.platforms }}")
+            if [ "$ALLOWED_PLATFORMS" != "${{ needs.setup.outputs.platforms }}" ]; then
+              echo "- $DIR (restricted to: $ALLOWED_PLATFORMS): ${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-$DIR:{latest | ${{ github.sha }} | vN}" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- $DIR: ${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-$DIR:{latest | ${{ github.sha }} | vN}" >> "$GITHUB_STEP_SUMMARY"
+            fi
           done
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -411,3 +535,4 @@ jobs:
           echo "- Only directories with a Containerfile that changed (or whose contents changed) are built." >> "$GITHUB_STEP_SUMMARY"
           echo "- Deleted directories are ignored gracefully (no build attempted)." >> "$GITHUB_STEP_SUMMARY"
           echo "- Version tags are created as vN (and vN-<arch> for platform images)." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Architecture restrictions can be specified using a .buildconfig file in the directory." >> "$GITHUB_STEP_SUMMARY"

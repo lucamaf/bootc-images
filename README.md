@@ -120,6 +120,46 @@ Choose one authentication method:
 - `SOURCE_REGISTRY_USER`: Source registry username override
 - `SOURCE_REGISTRY_PASSWORD`: Source registry password override
 
+
+---
+
+## Architecture-Specific Builds
+
+By default, all container images are built for multiple architectures (AMD64 and ARM64). However, you can restrict specific images to only build for certain architectures by adding a `.buildconfig` file to the image directory.
+
+### Restricting Build Architectures
+
+To restrict an image to specific architectures, create a `.buildconfig` file in the same directory as your `Containerfile`:
+
+```yaml
+# Build only for ARM64
+platforms: linux/arm64
+```
+
+```yaml
+# Build only for AMD64
+platforms: linux/amd64
+```
+
+```yaml
+# Build for both architectures (same as no .buildconfig file)
+platforms: linux/amd64,linux/arm64
+```
+
+### Example Directory Structure
+
+```
+my-arm64-only-image/
+├── Containerfile
+├── .buildconfig          # Contains: platforms: linux/arm64
+└── other-files...
+
+my-regular-image/
+├── Containerfile         # No .buildconfig = builds for all platforms
+└── other-files...
+```
+
+
 ---
 
 
@@ -128,5 +168,3 @@ Built images are available in your repository's **Packages** section, accessible
 ```
 https://github.com/{username}/{repository}/pkgs/container/{image-name}
 ```
-
-
