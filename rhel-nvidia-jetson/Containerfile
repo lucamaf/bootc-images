@@ -8,9 +8,9 @@ FROM registry.redhat.io/rhel9/rhel-bootc@sha256:031d9c863945013c82c7c087ac7eff5f
 # Remove upstream host1x kernel module (conflicts with nvidia provided one)
 COPY RPMS /tmp/artifact/RPMS
 
-RUN sudo dnf -y install /tmp/artifact/RPMS/aarch64/*.rpm && \
-    sudo dnf clean all && \
-    sudo systemctl mask nvfancontrol.service nvpmodel.service nvpower.service && \
+RUN dnf -y install /tmp/artifact/RPMS/aarch64/*.rpm && \
+    dnf clean all && \
+    systemctl mask nvfancontrol.service nvpmodel.service nvpower.service && \
     rm -r /tmp/artifact && \
     rm /usr/lib/modules/*/kernel/drivers/gpu/host1x/host1x.ko.xz
 
@@ -19,9 +19,9 @@ RUN set -x; kver=$(cd /usr/lib/modules && echo *); dracut -vf /usr/lib/modules/$
 
 # Install NVIDIA container toolkit
 RUN curl -s -L https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo | \
-    sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo && \
-    sudo dnf -y install nvidia-container-toolkit && \
-    sudo dnf clean all
+    tee /etc/yum.repos.d/nvidia-container-toolkit.repo && \
+    dnf -y install nvidia-container-toolkit && \
+    dnf clean all
 
 # Create and enable a systemd service to generate the NVIDIA CDI YAML file
 RUN cat <<EOF > /etc/systemd/system/nvidia-cdi.service
