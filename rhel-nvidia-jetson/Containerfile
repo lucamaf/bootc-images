@@ -6,7 +6,9 @@ FROM registry.redhat.io/rhel9/rhel-bootc@sha256:031d9c863945013c82c7c087ac7eff5f
 # Install NVIDIA jetpack components
 # Mask nvpower.service (causes kernel panic)
 # Remove upstream host1x kernel module (conflicts with nvidia provided one)
-COPY RPMS /tmp/artifact/RPMS
+
+# Container image with nvidia jetson RPMs
+COPY --from=quay.io/luisarizmendi/rhel-nvidia-jetson-rpms:9.6 /artifacts/ /tmp/artifact/
 
 RUN dnf -y install /tmp/artifact/RPMS/aarch64/*.rpm && \
     dnf clean all && \
