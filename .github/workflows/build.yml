@@ -421,6 +421,8 @@ jobs:
 
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "artifact_matrix=$ARTIFACT_MATRIX" >> "$GITHUB_OUTPUT"
+          
+          echo "=== Setup script completed successfully ==="
 
   # Matrix job: Build the bootc image for each (directory, platform)
   build-image:
