@@ -10,7 +10,7 @@ on:
       formats:
         description: 'Export formats (comma-separated)'
         required: true
-        default: 'anaconda-iso,qcow2'
+        default: 'anaconda-iso'
   push:
     branches:
       - main
@@ -433,7 +433,7 @@ jobs:
         if: always()
         run: subscription-manager unregister
 
-  # Matrix job: Build installable artifacts for each (directory, platform, format)
+# Matrix job: Build installable artifacts for each (directory, platform, format)
   build-artifacts:
     name: Build ${{ matrix.dir }} artifacts (${{ matrix.arch }}, ${{ matrix.format }})
     needs: [setup, build-image]
@@ -472,24 +472,33 @@ jobs:
             subscription-manager register --username=${{ secrets.RH_USERNAME }} --password=${{ secrets.RH_PASSWORD }}
           fi
 
+      # workaround for https://github.com/redhat-actions/podman-login/issues/42
+      - name: Workaround open podman-login action issue
+        env:
+          auth: "{ \"auths\": {} }"
+        run: |
+          mkdir -p $HOME/.docker
+          echo "$auth" > $HOME/.docker/config.json
+
       - name: Log in to GitHub Container Registry
         uses: redhat-actions/podman-login@v1
         with:
           registry: ${{ env.DEST_REGISTRY_HOST }}
           username: ${{ env.DEST_REGISTRY_USER }}
           password: ${{ env.DEST_REGISTRY_PASSWORD }}
+          auth_file_path: /run/containers/0/auth.json
 
       - name: Determine image version
         id: version
         shell: bash
         run: |
           set -euo pipefail
-          
+
           IMAGE_NAME="bootc-${{ matrix.dir }}"
           IMAGE_BASE="${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/${IMAGE_NAME}"
-          
+
           echo "Determining version for: $IMAGE_BASE"
-          
+
           # Get existing tags from the registry using skopeo
           EXISTING_TAGS=""
           if skopeo list-tags "docker://${IMAGE_BASE}" >/tmp/tags.json 2>/dev/null; then
@@ -500,7 +509,7 @@ jobs:
           else
             echo "No existing tags found or repository doesn't exist yet"
           fi
-          
+
           if [ -z "$EXISTING_TAGS" ]; then
             echo "No existing version tags found, starting with v1"
             CURRENT_TAG="v1"
@@ -510,7 +519,7 @@ jobs:
             # Check if platform-specific tag exists for incremented version
             HIGHEST_NUM=$(echo "$HIGHEST_VERSION" | sed 's/v//')
             INCREMENTED_VERSION="v$((HIGHEST_NUM + 1))"
-            
+
             if skopeo inspect "docker://${IMAGE_BASE}:${INCREMENTED_VERSION}-${{ matrix.arch }}" >/dev/null 2>&1; then
               CURRENT_TAG="$INCREMENTED_VERSION"
               echo "Using incremented version: $CURRENT_TAG"
@@ -519,7 +528,7 @@ jobs:
               echo "Using highest existing version: $CURRENT_TAG"
             fi
           fi
-          
+
           echo "VERSION_TAG=$CURRENT_TAG" | tee -a "$GITHUB_ENV"
           echo "version=$CURRENT_TAG" >> "$GITHUB_OUTPUT"
 
@@ -532,12 +541,12 @@ jobs:
       - name: Create bootc artifact with bootc-image-builder
         run: |
           set -euo pipefail
-          
+
           IMAGE="${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-${{ matrix.dir }}:${{ steps.version.outputs.version }}-${{ matrix.arch }}"
           mkdir -p output
-          
+
           echo "Creating ${{ matrix.format }} artifact for $IMAGE"
-          
+
           # Run bootc-image-builder
           podman run \
             --rm \
@@ -550,11 +559,11 @@ jobs:
             --type ${{ matrix.format }} \
             --use-librepo=True \
             "$IMAGE"
-          
+
           # List created files
           echo "Created artifacts:"
           ls -la output/
-          
+
           # Verify we have the expected output
           if [ ! "$(ls -A output/)" ]; then
             echo "ERROR: No artifacts were created!"
@@ -565,24 +574,24 @@ jobs:
         id: artifact_image
         run: |
           set -euo pipefail
-          
+
           ARTIFACT_IMAGE_NAME="${{ env.DEST_REGISTRY_USER }}/bootc-${{ matrix.dir }}-${{ matrix.format }}"
           ARTIFACT_IMAGE_TAG="${{ steps.version.outputs.version }}-${{ matrix.arch }}"
-          
+
           echo "Creating scratch image: $ARTIFACT_IMAGE_NAME:$ARTIFACT_IMAGE_TAG"
-          
+
           # Create a simple Containerfile for the scratch image
           cat > Containerfile.artifact << 'EOF'
           FROM scratch
           COPY output/ /artifacts/
           EOF
-          
+
           # Build the scratch image containing the artifacts
           buildah bud \
             --tag "$ARTIFACT_IMAGE_NAME:$ARTIFACT_IMAGE_TAG" \
             --file Containerfile.artifact \
             .
-          
+
           echo "artifact_image=$ARTIFACT_IMAGE_NAME" >> "$GITHUB_OUTPUT"
           echo "artifact_tag=$ARTIFACT_IMAGE_TAG" >> "$GITHUB_OUTPUT"
 
