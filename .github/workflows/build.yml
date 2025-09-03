@@ -151,139 +151,16 @@ jobs:
             fi
           done
 
-  # Summary job
-  summary:
-    name: Build Summary
-    needs: [setup, build-image, create-manifest]
-    runs-on: ubuntu-latest
-    if: always()
-    env:
-      DEST_REGISTRY_HOST: "${{ vars.DEST_REGISTRY_HOST || 'ghcr.io' }}"
-      DEST_REGISTRY_USER: "${{ vars.DEST_REGISTRY_USER || github.repository_owner }}"
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+          echo "Final build directories: ${BUILD_DIRS[*]}"
 
-      - name: Print build summary
-        shell: bash
-        run: |
-          # Function to get allowed platforms for a directory
-          get_allowed_platforms() {
-            local dir="$1"
-            local default_platforms="$2"
-            
-            if [ -f "$dir/.buildconfig" ]; then
-              # Parse .buildconfig file for platforms
-              local config_platforms=$(grep -E '^platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^platforms\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ')
-              if [ -n "$config_platforms" ]; then
-                echo "$config_platforms"
-                return
-              fi
-            fi
-            
-            # Return default platforms if no restriction found
-            echo "$default_platforms"
-          }
-
-          # Function to get artifact configuration for a directory
-          get_artifact_config() {
-            local dir="$1"
-            local default_formats="${{ needs.setup.outputs.formats }}"
-            
-            local create_artifacts=""
-            local artifact_formats=""
-            local artifact_platforms=""
-            
-            if [ -f "$dir/.buildconfig" ]; then
-              create_artifacts=$(grep -E '^artifacts\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifacts\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ' || echo "")
-              artifact_formats=$(grep -E '^artifact_formats\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifact_formats\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ' || echo "")
-              artifact_platforms=$(grep -E '^artifact_platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifact_platforms\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ' || echo "")
-            fi
-            
-            echo "$create_artifacts,$artifact_formats,$artifact_platforms"
-          }
-
-          echo "## Build Summary" >> "$GITHUB_STEP_SUMMARY"
-          if [ "${{ needs.setup.outputs.has_dirs }}" != "true" ]; then
-            echo "No buildable directory changes detected in this run." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          echo "### Global Configuration" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Platforms**: ${{ needs.setup.outputs.platforms }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Formats**: ${{ needs.setup.outputs.formats }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          DIRS_JSON='${{ needs.setup.outputs.dirs }}'
-          # Remove brackets and quotes, split by comma
-          DIRS_CLEAN=$(echo "$DIRS_JSON" | sed 's/\[//g; s/\]//g; s/"//g')
-          IFS=',' read -ra DIRS <<< "$DIRS_CLEAN"
-
-          echo "### Bootc Images Built" >> "$GITHUB_STEP_SUMMARY"
-          for DIR in "${DIRS[@]}"; do
-            ALLOWED_PLATFORMS=$(get_allowed_platforms "$DIR" "${{ needs.setup.outputs.platforms }}")
-            if [ "$ALLOWED_PLATFORMS" != "${{ needs.setup.outputs.platforms }}" ]; then
-              echo "- **$DIR** (platforms: $ALLOWED_PLATFORMS): \`${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-$DIR:{latest | ${{ github.sha }} | vN}\`" >> "$GITHUB_STEP_SUMMARY"
-            else
-              echo "- **$DIR**: \`${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-$DIR:{latest | ${{ github.sha }} | vN}\`" >> "$GITHUB_STEP_SUMMARY"
-            fi
-          done
-
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          
-          if [ "${{ needs.setup.outputs.has_artifacts }}" = "true" ]; then
-            echo "### Installable Artifacts Built" >> "$GITHUB_STEP_SUMMARY"
-            
-            # Parse the artifact matrix to show what was built
-            ARTIFACT_MATRIX_JSON='${{ needs.setup.outputs.artifact_matrix }}'
-            
-            # Group by directory and show formats/platforms
-            for DIR in "${DIRS[@]}"; do
-              ARTIFACT_CONFIG=$(get_artifact_config "$DIR")
-              IFS=',' read -ra CONFIG_PARTS <<< "$ARTIFACT_CONFIG"
-              CREATE_ARTIFACTS="${CONFIG_PARTS[0]}"
-              ARTIFACT_FORMATS="${CONFIG_PARTS[1]}"
-              ARTIFACT_PLATFORMS="${CONFIG_PARTS[2]}"
-              
-              # Check if this directory has artifacts in the matrix
-              DIR_FORMATS=$(echo "$ARTIFACT_MATRIX_JSON" | jq -r --arg dir "$DIR" '.include[] | select(.dir == $dir) | .format' | sort -u | tr '\n' ',' | sed 's/,$//')
-              DIR_PLATFORMS=$(echo "$ARTIFACT_MATRIX_JSON" | jq -r --arg dir "$DIR" '.include[] | select(.dir == $dir) | .platform' | sort -u | tr '\n' ',' | sed 's/,$//')
-              
-              if [ -n "$DIR_FORMATS" ]; then
-                echo "- **$DIR**:" >> "$GITHUB_STEP_SUMMARY"
-                echo "  - **Formats**: $DIR_FORMATS" >> "$GITHUB_STEP_SUMMARY"
-                echo "  - **Platforms**: $DIR_PLATFORMS" >> "$GITHUB_STEP_SUMMARY"
-                
-                # List the artifact images
-                IFS=',' read -ra FORMAT_ARRAY <<< "$DIR_FORMATS"
-                for FORMAT in "${FORMAT_ARRAY[@]}"; do
-                  echo "  - **Image**: \`${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-$DIR-$FORMAT:{latest | vN}\`" >> "$GITHUB_STEP_SUMMARY"
-                done
-              fi
-            done
-          else
-            echo "### Installable Artifacts" >> "$GITHUB_STEP_SUMMARY"
-            echo "No artifacts were built in this run." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Configuration Notes" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Only directories with a Containerfile that changed (or whose contents changed) are built." >> "$GITHUB_STEP_SUMMARY"
-          echo "- Deleted directories are ignored gracefully (no build attempted)." >> "$GITHUB_STEP_SUMMARY"
-          echo "- Version tags are created as vN (and vN-<arch> for platform images)." >> "$GITHUB_STEP_SUMMARY"
-          echo "- Architecture and artifact restrictions can be specified using a \`.buildconfig\` file in each directory." >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "#### .buildconfig options:" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`platforms: linux/amd64,linux/arm64\` - Restrict platforms for bootc images" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`artifacts: true|false|auto\` - Enable/disable artifact creation (auto = create if none exist)" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`artifact_formats: anaconda-iso,qcow2,vmdk,raw,ami,vhd,gce\` - Specify artifact formats" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`artifact_platforms: linux/amd64,linux/arm64\` - Restrict platforms for artifacts (defaults to same as bootc platforms)" >> "$GITHUB_STEP_SUMMARY"
-
+          # Set outputs based on whether we have directories to build
           if [ ${#BUILD_DIRS[@]} -eq 0 ]; then
             echo "No buildable directories detected. The workflow will skip build & manifest steps."
             echo 'has_dirs=false' >> "$GITHUB_OUTPUT"
             echo 'has_artifacts=false' >> "$GITHUB_OUTPUT"
             echo 'dirs=[]' >> "$GITHUB_OUTPUT"
+            echo 'matrix={"include":[]}' >> "$GITHUB_OUTPUT"
+            echo 'artifact_matrix={"include":[]}' >> "$GITHUB_OUTPUT"
           else
             echo 'has_dirs=true' >> "$GITHUB_OUTPUT"
             # JSON array of directories for later jobs
@@ -293,134 +170,134 @@ jobs:
               printf '"%s"' "${BUILD_DIRS[$i]}" >> "$GITHUB_OUTPUT"
             done
             printf ']\n' >> "$GITHUB_OUTPUT"
-          fi
 
-          # Build the cross-product matrix (platform × directory) with architecture restrictions
-          MATRIX='{"include":['
-          ARTIFACT_MATRIX='{"include":['
-          IFS=',' read -ra PLATFORM_ARRAY <<< "$PLATFORMS"
-          IFS=',' read -ra FORMAT_ARRAY <<< "$FORMATS"
+            # Build the cross-product matrix (platform × directory) with architecture restrictions
+            MATRIX='{"include":['
+            ARTIFACT_MATRIX='{"include":['
+            IFS=',' read -ra PLATFORM_ARRAY <<< "$PLATFORMS"
+            IFS=',' read -ra FORMAT_ARRAY <<< "$FORMATS"
 
-          first=1
-          artifact_first=1
-          has_any_artifacts=false
-          
-          for DIR in "${BUILD_DIRS[@]:-}"; do
-            [ -z "$DIR" ] && continue
+            first=1
+            artifact_first=1
+            has_any_artifacts=false
             
-            # Get allowed platforms for this directory
-            ALLOWED_PLATFORMS=$(get_allowed_platforms "$DIR" "$PLATFORMS")
-            echo "Directory $DIR allowed platforms: $ALLOWED_PLATFORMS"
-            
-            IFS=',' read -ra ALLOWED_PLATFORM_ARRAY <<< "$ALLOWED_PLATFORMS"
-            
-            for PLATFORM in "${ALLOWED_PLATFORM_ARRAY[@]}"; do
-              # Check if this platform is in the global platform list
-              PLATFORM_FOUND=false
-              for GLOBAL_PLATFORM in "${PLATFORM_ARRAY[@]}"; do
-                if [ "$PLATFORM" = "$GLOBAL_PLATFORM" ]; then
-                  PLATFORM_FOUND=true
-                  break
-                fi
-              done
+            for DIR in "${BUILD_DIRS[@]:-}"; do
+              [ -z "$DIR" ] && continue
               
-              if [ "$PLATFORM_FOUND" = false ]; then
-                echo "Platform $PLATFORM for $DIR not in global platform list, skipping"
-                continue
-              fi
+              # Get allowed platforms for this directory
+              ALLOWED_PLATFORMS=$(get_allowed_platforms "$DIR" "$PLATFORMS")
+              echo "Directory $DIR allowed platforms: $ALLOWED_PLATFORMS"
               
-              ARCH="${PLATFORM#linux/}"
-              if [ "$ARCH" = "arm64" ]; then
-                RUNNER="ubuntu-24.04-arm"
-              else
-                RUNNER="ubuntu-latest"
-              fi
-
-              if [ $first -eq 0 ]; then MATRIX+=","; fi
-              first=0
-              MATRIX+="{\"platform\":\"$PLATFORM\",\"arch\":\"$ARCH\",\"runner\":\"$RUNNER\",\"dir\":\"$DIR\"}"
-            done
-            
-            # Handle artifact configuration
-            IMAGE_BASE="${{ vars.DEST_REGISTRY_HOST || 'ghcr.io' }}/${{ vars.DEST_REGISTRY_USER || github.repository_owner }}/bootc-$DIR"
-            ARTIFACT_CONFIG=$(get_artifact_config "$DIR" "$FORMATS" "$PLATFORMS")
-            IFS=',' read -ra CONFIG_PARTS <<< "$ARTIFACT_CONFIG"
-            CREATE_ARTIFACTS="${CONFIG_PARTS[0]}"
-            ARTIFACT_FORMATS="${CONFIG_PARTS[1]:-$FORMATS}"
-            ARTIFACT_PLATFORMS="${CONFIG_PARTS[2]:-$ALLOWED_PLATFORMS}"
-            
-            echo "Directory $DIR artifact config - create: $CREATE_ARTIFACTS, formats: $ARTIFACT_FORMATS, platforms: $ARTIFACT_PLATFORMS"
-            
-            # Determine if we should create artifacts
-            SHOULD_CREATE=false
-            if [ "$CREATE_ARTIFACTS" = "true" ]; then
-              SHOULD_CREATE=true
-            elif [ "$CREATE_ARTIFACTS" = "false" ]; then
-              SHOULD_CREATE=false
-            elif [ "$CREATE_ARTIFACTS" = "auto" ]; then
-              # Check if artifacts already exist
-              EXISTING_ARTIFACTS=$(check_existing_artifacts "$IMAGE_BASE")
-              if [ "$EXISTING_ARTIFACTS" = "false" ]; then
-                SHOULD_CREATE=true
-                # Use default format if none specified
-                if [ -z "$ARTIFACT_FORMATS" ]; then
-                  ARTIFACT_FORMATS="anaconda-iso"
-                fi
-              else
-                echo "Artifacts already exist for $DIR, skipping auto-creation"
-              fi
-            fi
-            
-            if [ "$SHOULD_CREATE" = true ]; then
-              has_any_artifacts=true
-              IFS=',' read -ra ARTIFACT_FORMAT_ARRAY <<< "$ARTIFACT_FORMATS"
-              IFS=',' read -ra ARTIFACT_PLATFORM_ARRAY <<< "$ARTIFACT_PLATFORMS"
+              IFS=',' read -ra ALLOWED_PLATFORM_ARRAY <<< "$ALLOWED_PLATFORMS"
               
-              for ARTIFACT_PLATFORM in "${ARTIFACT_PLATFORM_ARRAY[@]}"; do
+              for PLATFORM in "${ALLOWED_PLATFORM_ARRAY[@]}"; do
                 # Check if this platform is in the global platform list
                 PLATFORM_FOUND=false
                 for GLOBAL_PLATFORM in "${PLATFORM_ARRAY[@]}"; do
-                  if [ "$ARTIFACT_PLATFORM" = "$GLOBAL_PLATFORM" ]; then
+                  if [ "$PLATFORM" = "$GLOBAL_PLATFORM" ]; then
                     PLATFORM_FOUND=true
                     break
                   fi
                 done
                 
                 if [ "$PLATFORM_FOUND" = false ]; then
-                  echo "Artifact platform $ARTIFACT_PLATFORM for $DIR not in global platform list, skipping"
+                  echo "Platform $PLATFORM for $DIR not in global platform list, skipping"
                   continue
                 fi
                 
-                ARTIFACT_ARCH="${ARTIFACT_PLATFORM#linux/}"
-                if [ "$ARTIFACT_ARCH" = "arm64" ]; then
-                  ARTIFACT_RUNNER="ubuntu-24.04-arm"
+                ARCH="${PLATFORM#linux/}"
+                if [ "$ARCH" = "arm64" ]; then
+                  RUNNER="ubuntu-24.04-arm"
                 else
-                  ARTIFACT_RUNNER="ubuntu-latest"
+                  RUNNER="ubuntu-latest"
                 fi
-                
-                for ARTIFACT_FORMAT in "${ARTIFACT_FORMAT_ARRAY[@]}"; do
-                  if [ $artifact_first -eq 0 ]; then ARTIFACT_MATRIX+=","; fi
-                  artifact_first=0
-                  ARTIFACT_MATRIX+="{\"platform\":\"$ARTIFACT_PLATFORM\",\"arch\":\"$ARTIFACT_ARCH\",\"runner\":\"$ARTIFACT_RUNNER\",\"dir\":\"$DIR\",\"format\":\"$ARTIFACT_FORMAT\"}"
-                done
-              done
-            fi
-          done
-          
-          MATRIX+=']}'
-          ARTIFACT_MATRIX+=']}'
-          
-          echo "Final Matrix: $MATRIX"
-          echo "Final Artifact Matrix: $ARTIFACT_MATRIX"
-          
-          if [ "$has_any_artifacts" = true ]; then
-            echo 'has_artifacts=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'has_artifacts=false' >> "$GITHUB_OUTPUT"
-          fi
 
-          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
-          echo "artifact_matrix=$ARTIFACT_MATRIX" >> "$GITHUB_OUTPUT"
+                if [ $first -eq 0 ]; then MATRIX+=","; fi
+                first=0
+                MATRIX+="{\"platform\":\"$PLATFORM\",\"arch\":\"$ARCH\",\"runner\":\"$RUNNER\",\"dir\":\"$DIR\"}"
+              done
+              
+              # Handle artifact configuration
+              IMAGE_BASE="${{ vars.DEST_REGISTRY_HOST || 'ghcr.io' }}/${{ vars.DEST_REGISTRY_USER || github.repository_owner }}/bootc-$DIR"
+              ARTIFACT_CONFIG=$(get_artifact_config "$DIR" "$FORMATS" "$PLATFORMS")
+              IFS=',' read -ra CONFIG_PARTS <<< "$ARTIFACT_CONFIG"
+              CREATE_ARTIFACTS="${CONFIG_PARTS[0]}"
+              ARTIFACT_FORMATS="${CONFIG_PARTS[1]:-$FORMATS}"
+              ARTIFACT_PLATFORMS="${CONFIG_PARTS[2]:-$ALLOWED_PLATFORMS}"
+              
+              echo "Directory $DIR artifact config - create: $CREATE_ARTIFACTS, formats: $ARTIFACT_FORMATS, platforms: $ARTIFACT_PLATFORMS"
+              
+              # Determine if we should create artifacts
+              SHOULD_CREATE=false
+              if [ "$CREATE_ARTIFACTS" = "true" ]; then
+                SHOULD_CREATE=true
+              elif [ "$CREATE_ARTIFACTS" = "false" ]; then
+                SHOULD_CREATE=false
+              elif [ "$CREATE_ARTIFACTS" = "auto" ]; then
+                # Check if artifacts already exist
+                EXISTING_ARTIFACTS=$(check_existing_artifacts "$IMAGE_BASE")
+                if [ "$EXISTING_ARTIFACTS" = "false" ]; then
+                  SHOULD_CREATE=true
+                  # Use default format if none specified
+                  if [ -z "$ARTIFACT_FORMATS" ]; then
+                    ARTIFACT_FORMATS="anaconda-iso"
+                  fi
+                else
+                  echo "Artifacts already exist for $DIR, skipping auto-creation"
+                fi
+              fi
+              
+              if [ "$SHOULD_CREATE" = true ]; then
+                has_any_artifacts=true
+                IFS=',' read -ra ARTIFACT_FORMAT_ARRAY <<< "$ARTIFACT_FORMATS"
+                IFS=',' read -ra ARTIFACT_PLATFORM_ARRAY <<< "$ARTIFACT_PLATFORMS"
+                
+                for ARTIFACT_PLATFORM in "${ARTIFACT_PLATFORM_ARRAY[@]}"; do
+                  # Check if this platform is in the global platform list
+                  PLATFORM_FOUND=false
+                  for GLOBAL_PLATFORM in "${PLATFORM_ARRAY[@]}"; do
+                    if [ "$ARTIFACT_PLATFORM" = "$GLOBAL_PLATFORM" ]; then
+                      PLATFORM_FOUND=true
+                      break
+                    fi
+                  done
+                  
+                  if [ "$PLATFORM_FOUND" = false ]; then
+                    echo "Artifact platform $ARTIFACT_PLATFORM for $DIR not in global platform list, skipping"
+                    continue
+                  fi
+                  
+                  ARTIFACT_ARCH="${ARTIFACT_PLATFORM#linux/}"
+                  if [ "$ARTIFACT_ARCH" = "arm64" ]; then
+                    ARTIFACT_RUNNER="ubuntu-24.04-arm"
+                  else
+                    ARTIFACT_RUNNER="ubuntu-latest"
+                  fi
+                  
+                  for ARTIFACT_FORMAT in "${ARTIFACT_FORMAT_ARRAY[@]}"; do
+                    if [ $artifact_first -eq 0 ]; then ARTIFACT_MATRIX+=","; fi
+                    artifact_first=0
+                    ARTIFACT_MATRIX+="{\"platform\":\"$ARTIFACT_PLATFORM\",\"arch\":\"$ARTIFACT_ARCH\",\"runner\":\"$ARTIFACT_RUNNER\",\"dir\":\"$DIR\",\"format\":\"$ARTIFACT_FORMAT\"}"
+                  done
+                done
+              fi
+            done
+            
+            MATRIX+=']}'
+            ARTIFACT_MATRIX+=']}'
+            
+            echo "Final Matrix: $MATRIX"
+            echo "Final Artifact Matrix: $ARTIFACT_MATRIX"
+            
+            if [ "$has_any_artifacts" = true ]; then
+              echo 'has_artifacts=true' >> "$GITHUB_OUTPUT"
+            else
+              echo 'has_artifacts=false' >> "$GITHUB_OUTPUT"
+            fi
+
+            echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+            echo "artifact_matrix=$ARTIFACT_MATRIX" >> "$GITHUB_OUTPUT"
+          fi
           
           echo "=== Setup script completed successfully ==="
 
@@ -820,9 +697,184 @@ jobs:
             if skopeo list-tags "docker://${IMAGE_BASE}" >/tmp/tags.json 2>/dev/null; then
               # Filter out platform-specific tags to get only base version tags
               EXISTING_TAGS=$(jq -r '.Tags[]' /tmp/tags.json 2>/dev/null | \
-                grep -oE '^v[0-9]+$' | \
+                grep -oE '^v[0-9]+
+                 | \
                 sort -V || echo "")
               echo "Found existing base version tags: $EXISTING_TAGS"
             else
               echo "No existing tags found"
             fi
+            
+            if [ -z "$EXISTING_TAGS" ]; then
+              echo "No existing version tags found, using v1"
+              VERSION_TAG="v1"
+            else
+              # Find the highest version number - this should be the one just built
+              HIGHEST_VERSION=$(echo "$EXISTING_TAGS" | tail -n1)
+              HIGHEST_NUM=$(echo "$HIGHEST_VERSION" | sed 's/v//')
+              NEXT_VERSION="v$((HIGHEST_NUM + 1))"
+              
+              # Check if the platform-specific tags exist for the next version
+              PLATFORM_CHECK="${BUILT_PLATFORMS[0]#linux/}"
+              if skopeo inspect "docker://${IMAGE_BASE}:${NEXT_VERSION}-${PLATFORM_CHECK}" >/dev/null 2>&1; then
+                VERSION_TAG="$NEXT_VERSION"
+                echo "Using incremented version: $VERSION_TAG"
+              else
+                VERSION_TAG="$HIGHEST_VERSION"
+                echo "Using highest existing version: $VERSION_TAG"
+              fi
+            fi
+            
+            # Create manifests for each tag type
+            for TAG_TYPE in "latest" "${{ github.sha }}" "$VERSION_TAG"; do
+              echo "Creating manifest for $IMAGE_BASE:$TAG_TYPE"
+              
+              # Build the manifest create command
+              MANIFEST_IMAGES=()
+              for PLATFORM in "${BUILT_PLATFORMS[@]}"; do
+                ARCH="${PLATFORM#linux/}"
+                MANIFEST_IMAGES+=("$IMAGE_BASE:$TAG_TYPE-$ARCH")
+              done
+              
+              # Create and push the manifest
+              podman manifest create "$IMAGE_BASE:$TAG_TYPE"
+              for MANIFEST_IMAGE in "${MANIFEST_IMAGES[@]}"; do
+                echo "Adding $MANIFEST_IMAGE to manifest"
+                podman manifest add "$IMAGE_BASE:$TAG_TYPE" "$MANIFEST_IMAGE"
+              done
+              
+              echo "Pushing manifest $IMAGE_BASE:$TAG_TYPE"
+              podman manifest push "$IMAGE_BASE:$TAG_TYPE" "docker://$IMAGE_BASE:$TAG_TYPE"
+              
+              # Clean up local manifest
+              podman manifest rm "$IMAGE_BASE:$TAG_TYPE" || true
+            done
+          done
+
+  # Summary job
+  summary:
+    name: Build Summary
+    needs: [setup, build-image, create-manifest]
+    runs-on: ubuntu-latest
+    if: always()
+    env:
+      DEST_REGISTRY_HOST: "${{ vars.DEST_REGISTRY_HOST || 'ghcr.io' }}"
+      DEST_REGISTRY_USER: "${{ vars.DEST_REGISTRY_USER || github.repository_owner }}"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Print build summary
+        shell: bash
+        run: |
+          # Function to get allowed platforms for a directory
+          get_allowed_platforms() {
+            local dir="$1"
+            local default_platforms="$2"
+            
+            if [ -f "$dir/.buildconfig" ]; then
+              # Parse .buildconfig file for platforms
+              local config_platforms=$(grep -E '^platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^platforms\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ')
+              if [ -n "$config_platforms" ]; then
+                echo "$config_platforms"
+                return
+              fi
+            fi
+            
+            # Return default platforms if no restriction found
+            echo "$default_platforms"
+          }
+
+          # Function to get artifact configuration for a directory
+          get_artifact_config() {
+            local dir="$1"
+            local default_formats="${{ needs.setup.outputs.formats }}"
+            
+            local create_artifacts=""
+            local artifact_formats=""
+            local artifact_platforms=""
+            
+            if [ -f "$dir/.buildconfig" ]; then
+              create_artifacts=$(grep -E '^artifacts\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifacts\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ' || echo "")
+              artifact_formats=$(grep -E '^artifact_formats\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifact_formats\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ' || echo "")
+              artifact_platforms=$(grep -E '^artifact_platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifact_platforms\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ' || echo "")
+            fi
+            
+            echo "$create_artifacts,$artifact_formats,$artifact_platforms"
+          }
+
+          echo "## Build Summary" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ needs.setup.outputs.has_dirs }}" != "true" ]; then
+            echo "No buildable directory changes detected in this run." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "### Global Configuration" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Platforms**: ${{ needs.setup.outputs.platforms }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Formats**: ${{ needs.setup.outputs.formats }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          DIRS_JSON='${{ needs.setup.outputs.dirs }}'
+          # Remove brackets and quotes, split by comma
+          DIRS_CLEAN=$(echo "$DIRS_JSON" | sed 's/\[//g; s/\]//g; s/"//g')
+          IFS=',' read -ra DIRS <<< "$DIRS_CLEAN"
+
+          echo "### Bootc Images Built" >> "$GITHUB_STEP_SUMMARY"
+          for DIR in "${DIRS[@]}"; do
+            ALLOWED_PLATFORMS=$(get_allowed_platforms "$DIR" "${{ needs.setup.outputs.platforms }}")
+            if [ "$ALLOWED_PLATFORMS" != "${{ needs.setup.outputs.platforms }}" ]; then
+              echo "- **$DIR** (platforms: $ALLOWED_PLATFORMS): \`${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-$DIR:{latest | ${{ github.sha }} | vN}\`" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- **$DIR**: \`${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-$DIR:{latest | ${{ github.sha }} | vN}\`" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          
+          if [ "${{ needs.setup.outputs.has_artifacts }}" = "true" ]; then
+            echo "### Installable Artifacts Built" >> "$GITHUB_STEP_SUMMARY"
+            
+            # Parse the artifact matrix to show what was built
+            ARTIFACT_MATRIX_JSON='${{ needs.setup.outputs.artifact_matrix }}'
+            
+            # Group by directory and show formats/platforms
+            for DIR in "${DIRS[@]}"; do
+              ARTIFACT_CONFIG=$(get_artifact_config "$DIR")
+              IFS=',' read -ra CONFIG_PARTS <<< "$ARTIFACT_CONFIG"
+              CREATE_ARTIFACTS="${CONFIG_PARTS[0]}"
+              ARTIFACT_FORMATS="${CONFIG_PARTS[1]}"
+              ARTIFACT_PLATFORMS="${CONFIG_PARTS[2]}"
+              
+              # Check if this directory has artifacts in the matrix
+              DIR_FORMATS=$(echo "$ARTIFACT_MATRIX_JSON" | jq -r --arg dir "$DIR" '.include[] | select(.dir == $dir) | .format' | sort -u | tr '\n' ',' | sed 's/,$//')
+              DIR_PLATFORMS=$(echo "$ARTIFACT_MATRIX_JSON" | jq -r --arg dir "$DIR" '.include[] | select(.dir == $dir) | .platform' | sort -u | tr '\n' ',' | sed 's/,$//')
+              
+              if [ -n "$DIR_FORMATS" ]; then
+                echo "- **$DIR**:" >> "$GITHUB_STEP_SUMMARY"
+                echo "  - **Formats**: $DIR_FORMATS" >> "$GITHUB_STEP_SUMMARY"
+                echo "  - **Platforms**: $DIR_PLATFORMS" >> "$GITHUB_STEP_SUMMARY"
+                
+                # List the artifact images
+                IFS=',' read -ra FORMAT_ARRAY <<< "$DIR_FORMATS"
+                for FORMAT in "${FORMAT_ARRAY[@]}"; do
+                  echo "  - **Image**: \`${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-$DIR-$FORMAT:{latest | vN}\`" >> "$GITHUB_STEP_SUMMARY"
+                done
+              fi
+            done
+          else
+            echo "### Installable Artifacts" >> "$GITHUB_STEP_SUMMARY"
+            echo "No artifacts were built in this run." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Configuration Notes" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Only directories with a Containerfile that changed (or whose contents changed) are built." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Deleted directories are ignored gracefully (no build attempted)." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Version tags are created as vN (and vN-<arch> for platform images)." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Architecture and artifact restrictions can be specified using a \`.buildconfig\` file in each directory." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "#### .buildconfig options:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`platforms: linux/amd64,linux/arm64\` - Restrict platforms for bootc images" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`artifacts: true|false|auto\` - Enable/disable artifact creation (auto = create if none exist)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`artifact_formats: anaconda-iso,qcow2,vmdk,raw,ami,vhd,gce\` - Specify artifact formats" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`artifact_platforms: linux/amd64,linux/arm64\` - Restrict platforms for artifacts (defaults to same as bootc platforms)" >> "$GITHUB_STEP_SUMMARY"
