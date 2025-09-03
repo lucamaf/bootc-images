@@ -410,6 +410,9 @@ jobs:
           MATRIX+=']}'
           ARTIFACT_MATRIX+=']}'
           
+          echo "Final Matrix: $MATRIX"
+          echo "Final Artifact Matrix: $ARTIFACT_MATRIX"
+          
           if [ "$has_any_artifacts" = true ]; then
             echo 'has_artifacts=true' >> "$GITHUB_OUTPUT"
           else
@@ -418,8 +421,6 @@ jobs:
 
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "artifact_matrix=$ARTIFACT_MATRIX" >> "$GITHUB_OUTPUT"
-          echo "Matrix: $MATRIX"
-          echo "Artifact Matrix: $ARTIFACT_MATRIX"
 
   # Matrix job: Build the bootc image for each (directory, platform)
   build-image:
