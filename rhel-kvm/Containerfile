@@ -15,3 +15,4 @@ RUN for drv in qemu network nodedev nwfilter secret storage interface; do system
 #RUN systemctl enable cockpit.socket
 #////////////////////////////////////////
 
+
