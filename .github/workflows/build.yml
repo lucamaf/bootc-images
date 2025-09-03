@@ -82,7 +82,6 @@ jobs:
           get_artifact_config() {
             local dir="$1"
             local default_formats="$2"
-            local default_platforms="$3"
             
             local create_artifacts=""
             local artifact_formats=""
@@ -97,31 +96,26 @@ jobs:
               
               # Get artifact platforms if specified (fallback to regular platforms)
               artifact_platforms=$(grep -E '^artifact_platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifact_platforms\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ' || echo "")
-              if [ -z "$artifact_platforms" ]; then
-                artifact_platforms=$(get_allowed_platforms "$dir" "$default_platforms")
-              fi
             fi
             
-            # Default logic: if not explicitly set, check for existing artifacts
-            if [ -z "$create_artifacts" ]; then
-              echo "auto,$artifact_formats,$artifact_platforms"
-            else
-              echo "$create_artifacts,$artifact_formats,$artifact_platforms"
-            fi
+            echo "$create_artifacts,$artifact_formats,$artifact_platforms"
           }
 
-          # Function to check if artifacts exist for an image
-          check_existing_artifacts() {
+          # Function to check if artifacts exist for a specific platform
+          check_platform_artifacts() {
             local image_base="$1"
-            local existing_tags=""
+            local platform="$2"
+            local arch="${platform#linux/}"
             
             if skopeo list-tags "docker://${image_base}" >/tmp/check_tags.json 2>/dev/null; then
-              existing_tags=$(jq -r '.Tags[]' /tmp/check_tags.json 2>/dev/null | \
-                grep -E '-(anaconda-iso|qcow2|vmdk|raw|ami|vhd|gce)$' || echo "")
-            fi
-            
-            if [ -n "$existing_tags" ]; then
-              echo "true"
+              local existing_tags=$(jq -r '.Tags[]' /tmp/check_tags.json 2>/dev/null | \
+                grep -E "-(anaconda-iso|qcow2|vmdk|raw|ami|vhd|gce).*-${arch}$" || echo "")
+              
+              if [ -n "$existing_tags" ]; then
+                echo "true"
+              else
+                echo "false"
+              fi
             else
               echo "false"
             fi
@@ -190,6 +184,7 @@ jobs:
               
               IFS=',' read -ra ALLOWED_PLATFORM_ARRAY <<< "$ALLOWED_PLATFORMS"
               
+              # Build bootc image matrix
               for PLATFORM in "${ALLOWED_PLATFORM_ARRAY[@]}"; do
                 # Check if this platform is in the global platform list
                 PLATFORM_FOUND=false
@@ -217,70 +212,90 @@ jobs:
                 MATRIX+="{\"platform\":\"$PLATFORM\",\"arch\":\"$ARCH\",\"runner\":\"$RUNNER\",\"dir\":\"$DIR\"}"
               done
               
-              # Handle artifact configuration
+              # Handle artifact configuration per platform
               IMAGE_BASE="${{ vars.DEST_REGISTRY_HOST || 'ghcr.io' }}/${{ vars.DEST_REGISTRY_USER || github.repository_owner }}/bootc-$DIR"
-              ARTIFACT_CONFIG=$(get_artifact_config "$DIR" "$FORMATS" "$PLATFORMS")
+              ARTIFACT_CONFIG=$(get_artifact_config "$DIR" "$FORMATS")
               IFS=',' read -ra CONFIG_PARTS <<< "$ARTIFACT_CONFIG"
               CREATE_ARTIFACTS="${CONFIG_PARTS[0]}"
-              ARTIFACT_FORMATS="${CONFIG_PARTS[1]:-$FORMATS}"
-              ARTIFACT_PLATFORMS="${CONFIG_PARTS[2]:-$ALLOWED_PLATFORMS}"
+              ARTIFACT_FORMATS="${CONFIG_PARTS[1]}"
+              ARTIFACT_PLATFORMS="${CONFIG_PARTS[2]}"
+              
+              # Set defaults for artifact platforms if not specified
+              if [ -z "$ARTIFACT_PLATFORMS" ]; then
+                ARTIFACT_PLATFORMS="$ALLOWED_PLATFORMS"
+              fi
               
               echo "Directory $DIR artifact config - create: $CREATE_ARTIFACTS, formats: $ARTIFACT_FORMATS, platforms: $ARTIFACT_PLATFORMS"
               
-              # Determine if we should create artifacts
-              SHOULD_CREATE=false
-              if [ "$CREATE_ARTIFACTS" = "true" ]; then
-                SHOULD_CREATE=true
-              elif [ "$CREATE_ARTIFACTS" = "false" ]; then
-                SHOULD_CREATE=false
-              elif [ "$CREATE_ARTIFACTS" = "auto" ]; then
-                # Check if artifacts already exist
-                EXISTING_ARTIFACTS=$(check_existing_artifacts "$IMAGE_BASE")
-                if [ "$EXISTING_ARTIFACTS" = "false" ]; then
-                  SHOULD_CREATE=true
-                  # Use default format if none specified
-                  if [ -z "$ARTIFACT_FORMATS" ]; then
-                    ARTIFACT_FORMATS="anaconda-iso"
-                  fi
-                else
-                  echo "Artifacts already exist for $DIR, skipping auto-creation"
-                fi
-              fi
+              IFS=',' read -ra ARTIFACT_PLATFORM_ARRAY <<< "$ARTIFACT_PLATFORMS"
               
-              if [ "$SHOULD_CREATE" = true ]; then
-                has_any_artifacts=true
-                IFS=',' read -ra ARTIFACT_FORMAT_ARRAY <<< "$ARTIFACT_FORMATS"
-                IFS=',' read -ra ARTIFACT_PLATFORM_ARRAY <<< "$ARTIFACT_PLATFORMS"
+              # Process each platform individually for artifacts
+              for ARTIFACT_PLATFORM in "${ARTIFACT_PLATFORM_ARRAY[@]}"; do
+                # Check if this platform is in the global platform list
+                PLATFORM_FOUND=false
+                for GLOBAL_PLATFORM in "${PLATFORM_ARRAY[@]}"; do
+                  if [ "$ARTIFACT_PLATFORM" = "$GLOBAL_PLATFORM" ]; then
+                    PLATFORM_FOUND=true
+                    break
+                  fi
+                done
                 
-                for ARTIFACT_PLATFORM in "${ARTIFACT_PLATFORM_ARRAY[@]}"; do
-                  # Check if this platform is in the global platform list
-                  PLATFORM_FOUND=false
-                  for GLOBAL_PLATFORM in "${PLATFORM_ARRAY[@]}"; do
-                    if [ "$ARTIFACT_PLATFORM" = "$GLOBAL_PLATFORM" ]; then
-                      PLATFORM_FOUND=true
-                      break
-                    fi
-                  done
-                  
-                  if [ "$PLATFORM_FOUND" = false ]; then
-                    echo "Artifact platform $ARTIFACT_PLATFORM for $DIR not in global platform list, skipping"
-                    continue
+                if [ "$PLATFORM_FOUND" = false ]; then
+                  echo "Artifact platform $ARTIFACT_PLATFORM for $DIR not in global platform list, skipping"
+                  continue
+                fi
+                
+                # Also check if this platform was actually built (is in allowed platforms)
+                PLATFORM_BUILT=false
+                for ALLOWED_PLATFORM in "${ALLOWED_PLATFORM_ARRAY[@]}"; do
+                  if [ "$ARTIFACT_PLATFORM" = "$ALLOWED_PLATFORM" ]; then
+                    PLATFORM_BUILT=true
+                    break
                   fi
-                  
-                  ARTIFACT_ARCH="${ARTIFACT_PLATFORM#linux/}"
-                  if [ "$ARTIFACT_ARCH" = "arm64" ]; then
-                    ARTIFACT_RUNNER="ubuntu-24.04-arm"
+                done
+                
+                if [ "$PLATFORM_BUILT" = false ]; then
+                  echo "Artifact platform $ARTIFACT_PLATFORM for $DIR not in allowed platforms, skipping"
+                  continue
+                fi
+                
+                ARTIFACT_ARCH="${ARTIFACT_PLATFORM#linux/}"
+                if [ "$ARTIFACT_ARCH" = "arm64" ]; then
+                  ARTIFACT_RUNNER="ubuntu-24.04-arm"
+                else
+                  ARTIFACT_RUNNER="ubuntu-latest"
+                fi
+                
+                # Determine what formats to build for this platform
+                FORMATS_TO_BUILD=""
+                
+                if [ -n "$ARTIFACT_FORMATS" ]; then
+                  # If artifact_formats is specified in .buildconfig, always build those
+                  FORMATS_TO_BUILD="$ARTIFACT_FORMATS"
+                  echo "Using configured artifact formats for $DIR/$ARTIFACT_PLATFORM: $FORMATS_TO_BUILD"
+                else
+                  # If no artifact_formats specified, use auto mode per platform
+                  EXISTING_ARTIFACTS=$(check_platform_artifacts "$IMAGE_BASE" "$ARTIFACT_PLATFORM")
+                  if [ "$EXISTING_ARTIFACTS" = "false" ]; then
+                    FORMATS_TO_BUILD="anaconda-iso"
+                    echo "No existing artifacts found for $DIR/$ARTIFACT_PLATFORM, will create default: $FORMATS_TO_BUILD"
                   else
-                    ARTIFACT_RUNNER="ubuntu-latest"
+                    echo "Artifacts already exist for $DIR/$ARTIFACT_PLATFORM, skipping auto-creation"
                   fi
+                fi
+                
+                # Add to artifact matrix if we have formats to build
+                if [ -n "$FORMATS_TO_BUILD" ]; then
+                  has_any_artifacts=true
+                  IFS=',' read -ra ARTIFACT_FORMAT_ARRAY <<< "$FORMATS_TO_BUILD"
                   
                   for ARTIFACT_FORMAT in "${ARTIFACT_FORMAT_ARRAY[@]}"; do
                     if [ $artifact_first -eq 0 ]; then ARTIFACT_MATRIX+=","; fi
                     artifact_first=0
                     ARTIFACT_MATRIX+="{\"platform\":\"$ARTIFACT_PLATFORM\",\"arch\":\"$ARTIFACT_ARCH\",\"runner\":\"$ARTIFACT_RUNNER\",\"dir\":\"$DIR\",\"format\":\"$ARTIFACT_FORMAT\"}"
                   done
-                done
-              fi
+                fi
+              done
             done
             
             MATRIX+=']}'
@@ -678,7 +693,7 @@ jobs:
             IFS=',' read -ra ALLOWED_PLATFORM_ARRAY <<< "$ALLOWED_PLATFORMS"
             BUILT_PLATFORMS=()
             
-            for PLATFORM in "${ALLOWED_PLATFORM_ARRAY[@]}"; do
+                          for PLATFORM in "${ALLOWED_PLATFORM_ARRAY[@]}"; do
               # Check if this platform is in the global platform list
               PLATFORM_FOUND=false
               for GLOBAL_PLATFORM in "${GLOBAL_PLATFORM_ARRAY[@]}"; do
