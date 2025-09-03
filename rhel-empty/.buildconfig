@@ -5,5 +5,5 @@
 #platforms: linux/arm64
 
 # Valid values: anaconda-iso, qcow2, vmdk, raw, ami, vhd, gce
-# Example->  formats: anaconda-iso,qcow2 
-formats: anaconda-iso,qcow2,vmdk,raw,ami,vhd,gce
+# Example->  artifact_formats: anaconda-iso,qcow2 
+artifact_formats: anaconda-iso,qcow2,vmdk,raw,ami,vhd,gce

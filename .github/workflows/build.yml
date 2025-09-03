@@ -583,7 +583,7 @@ jobs:
           # Create a simple Containerfile for the scratch image
           cat > Containerfile.artifact << 'EOF'
           FROM scratch
-          COPY output/ /artifacts/
+          COPY output/ /
           EOF
 
           # Build the scratch image containing the artifacts
