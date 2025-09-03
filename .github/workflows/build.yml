@@ -154,7 +154,7 @@ jobs:
   # Summary job
   summary:
     name: Build Summary
-    needs: [setup, build-image, create-manifest, build-artifacts, create-artifact-manifests]
+    needs: [setup, build-image, create-manifest]
     runs-on: ubuntu-latest
     if: always()
     env:
