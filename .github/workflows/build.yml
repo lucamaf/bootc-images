@@ -67,7 +67,7 @@ jobs:
             
             if [ -f "$dir/.buildconfig" ]; then
               # Parse .buildconfig file for platforms
-              local config_platforms=$(grep -E '^platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^platforms\s*[:=]\s*//' | tr -d '"' | tr -d ' ')
+              local config_platforms=$(grep -E '^platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^platforms\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ')
               if [ -n "$config_platforms" ]; then
                 echo "$config_platforms"
                 return
@@ -90,13 +90,13 @@ jobs:
             
             if [ -f "$dir/.buildconfig" ]; then
               # Check if artifacts are explicitly enabled/disabled
-              create_artifacts=$(grep -E '^artifacts\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifacts\s*[:=]\s*//' | tr -d '"' | tr -d ' ' || echo "")
+              create_artifacts=$(grep -E '^artifacts\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifacts\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ' || echo "")
               
               # Get artifact formats if specified
-              artifact_formats=$(grep -E '^artifact_formats\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifact_formats\s*[:=]\s*//' | tr -d '"' | tr -d ' ' || echo "")
+              artifact_formats=$(grep -E '^artifact_formats\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifact_formats\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ' || echo "")
               
               # Get artifact platforms if specified (fallback to regular platforms)
-              artifact_platforms=$(grep -E '^artifact_platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifact_platforms\s*[:=]\s*//' | tr -d '"' | tr -d ' ' || echo "")
+              artifact_platforms=$(grep -E '^artifact_platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifact_platforms\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ' || echo "")
               if [ -z "$artifact_platforms" ]; then
                 artifact_platforms=$(get_allowed_platforms "$dir" "$default_platforms")
               fi
@@ -644,7 +644,7 @@ jobs:
             
             if [ -f "$dir/.buildconfig" ]; then
               # Parse .buildconfig file for platforms
-              local config_platforms=$(grep -E '^platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^platforms\s*[:=]\s*//' | tr -d '"' | tr -d ' ')
+              local config_platforms=$(grep -E '^platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^platforms\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ')
               if [ -n "$config_platforms" ]; then
                 echo "$config_platforms"
                 return
@@ -658,7 +658,7 @@ jobs:
           IFS=',' read -ra GLOBAL_PLATFORM_ARRAY <<< "${{ needs.setup.outputs.platforms }}"
 
           # Iterate directories detected in setup (JSON array)
-          DIRS_JSON="${{ needs.setup.outputs.dirs }}"
+          DIRS_JSON='${{ needs.setup.outputs.dirs }}'
           echo "Directories to process: $DIRS_JSON"
 
           # Convert JSON array to bash array
@@ -706,9 +706,7 @@ jobs:
             if skopeo list-tags "docker://${IMAGE_BASE}" >/tmp/tags.json 2>/dev/null; then
               # Filter out platform-specific tags to get only base version tags
               EXISTING_TAGS=$(jq -r '.Tags[]' /tmp/tags.json 2>/dev/null | \
-                grep -oE '^v[0-9]+
-                 | \
-                sort -V || echo "")
+                grep -oE '^v[0-9]+' | sort -V || echo "")
               echo "Found existing base version tags: $EXISTING_TAGS"
             else
               echo "No existing tags found"
@@ -783,7 +781,7 @@ jobs:
             
             if [ -f "$dir/.buildconfig" ]; then
               # Parse .buildconfig file for platforms
-              local config_platforms=$(grep -E '^platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^platforms\s*[:=]\s*//' | tr -d '"' | tr -d ' ')
+              local config_platforms=$(grep -E '^platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^platforms\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ')
               if [ -n "$config_platforms" ]; then
                 echo "$config_platforms"
                 return
@@ -804,9 +802,9 @@ jobs:
             local artifact_platforms=""
             
             if [ -f "$dir/.buildconfig" ]; then
-              create_artifacts=$(grep -E '^artifacts\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifacts\s*[:=]\s*//' | tr -d '"' | tr -d ' ' || echo "")
-              artifact_formats=$(grep -E '^artifact_formats\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifact_formats\s*[:=]\s*//' | tr -d '"' | tr -d ' ' || echo "")
-              artifact_platforms=$(grep -E '^artifact_platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifact_platforms\s*[:=]\s*//' | tr -d '"' | tr -d ' ' || echo "")
+              create_artifacts=$(grep -E '^artifacts\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifacts\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ' || echo "")
+              artifact_formats=$(grep -E '^artifact_formats\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifact_formats\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ' || echo "")
+              artifact_platforms=$(grep -E '^artifact_platforms\s*[:=]\s*' "$dir/.buildconfig" | sed -E 's/^artifact_platforms\s*[:=]\s*//' | tr -d '"'"'" | tr -d ' ' || echo "")
             fi
             
             echo "$create_artifacts,$artifact_formats,$artifact_platforms"
@@ -823,7 +821,7 @@ jobs:
           echo "- **Formats**: ${{ needs.setup.outputs.formats }}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
-          DIRS_JSON="${{ needs.setup.outputs.dirs }}"
+          DIRS_JSON='${{ needs.setup.outputs.dirs }}'
           # Remove brackets and quotes, split by comma
           DIRS_CLEAN=$(echo "$DIRS_JSON" | sed 's/\[//g; s/\]//g; s/"//g')
           IFS=',' read -ra DIRS <<< "$DIRS_CLEAN"
