@@ -4,4 +4,4 @@
 #platforms: linux/arm64
 
 # Valid values: anaconda-iso, qcow2, vmdk, raw, ami, vhd, gce
-#formats: anaconda-iso,qcow2,vmdk,raw,ami,vhd,gce
+formats: anaconda-iso,qcow2,vmdk,raw,ami,vhd,gce
