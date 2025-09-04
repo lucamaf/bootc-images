@@ -442,7 +442,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.artifact_matrix) }}
     # Use larger runners with more disk space for artifact creation
-    runs-on: ubuntu-latest-4-cores  # ~84GB disk vs ~14GB on ubuntu-latest
+    runs-on: ubuntu-latest  # ~14GB on ubuntu-latest
     env:
       # Disable Subscription Manager container passthrough
       SMDEV_CONTAINER_OFF: 1
