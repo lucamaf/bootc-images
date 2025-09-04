@@ -14,4 +14,3 @@ RUN dnf install -y  cockpit cockpit-machines cockpit-podman cockpit-system cockp
 
 RUN systemctl enable cockpit.socket
 #////////////////////////////////////////
-
