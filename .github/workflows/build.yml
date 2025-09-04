@@ -451,7 +451,7 @@ jobs:
       DEST_REGISTRY_PASSWORD: "${{ secrets.DEST_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}"
     container:
       image: registry.access.redhat.com/ubi9/ubi
-      options: --privileged
+      options: --privileged --user root
     permissions:
       contents: write
       packages: write
@@ -460,14 +460,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Get container tools in UBI builder
-        run: dnf -y install podman buildah skopeo jq sudo
-
-      - name: Configure passwordless sudo
-        run: |
-          # Add current user to sudoers with NOPASSWD
-          echo "$(whoami) ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
-          # Verify sudo works without password
-          sudo whoami
+        run: dnf -y install podman buildah skopeo jq 
 
       - name: Register with Red Hat subscription manager
         run: |
@@ -543,19 +536,19 @@ jobs:
         run: |
           IMAGE="${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-${{ matrix.dir }}:${{ steps.version.outputs.version }}-${{ matrix.arch }}"
           echo "Pulling bootc image: $IMAGE"
-          sudo podman pull "$IMAGE"
+          podman pull "$IMAGE"
 
       - name: Create bootc artifact with bootc-image-builder
         run: |
           set -euo pipefail
 
           IMAGE="${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-${{ matrix.dir }}:${{ steps.version.outputs.version }}-${{ matrix.arch }}"
-          sudo mkdir -p output
+          mkdir -p output
 
           echo "Creating ${{ matrix.format }} artifact for $IMAGE"
 
           # Run bootc-image-builder
-          sudo podman run \
+          podman run \
             --rm \
             --privileged \
             --pull=newer \
