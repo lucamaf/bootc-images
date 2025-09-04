@@ -268,6 +268,7 @@ mkdir artifacts
 podman create --name temp-container ghcr.io/{owner}/bootc-{directory}-{format}:{label}
 podman cp temp-container:/ ./artifacts/
 podman rm temp-container
+podman rmi ghcr.io/{owner}/bootc-{directory}-{format}:{label}
 
 # The installable files will be in ./artifacts/
 ls -la artifacts/
