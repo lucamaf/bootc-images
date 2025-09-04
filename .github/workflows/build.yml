@@ -462,6 +462,13 @@ jobs:
       - name: Get container tools in UBI builder
         run: dnf -y install podman buildah skopeo jq sudo
 
+      - name: Configure passwordless sudo
+        run: |
+          # Add current user to sudoers with NOPASSWD
+          echo "$(whoami) ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+          # Verify sudo works without password
+          sudo whoami
+
       - name: Register with Red Hat subscription manager
         run: |
           if [ -n "${{ secrets.RHT_ORGID }}" ] && [ -n "${{ secrets.RHT_ACT_KEY }}" ]; then
