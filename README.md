@@ -14,8 +14,6 @@ Store your images in designated folders within the repository's root directory. 
 
 ## How the Workflow Works
 
-![gha_pipeline.png](../../doc/gha_pipeline.png)
-
 1. **Setup**
    - Reads input parameters or defaults
    - Detects changed directories with Containerfiles
