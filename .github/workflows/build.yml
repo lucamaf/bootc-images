@@ -450,7 +450,7 @@ jobs:
       DEST_REGISTRY_USER: "${{ vars.DEST_REGISTRY_USER || github.repository_owner }}"
       DEST_REGISTRY_PASSWORD: "${{ secrets.DEST_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}"
     container:
-      image: registry.access.redhat.com/ubi9/ubi
+      image: registry.redhat.io/rhel9/bootc-image-builder:latest
       options: --privileged --user root
     permissions:
       contents: write
@@ -546,8 +546,6 @@ jobs:
           mkdir -p output
 
           echo "Creating ${{ matrix.format }} artifact for $IMAGE"
-
-          sed -i 's/^driver = .*/driver = "vfs"/' /etc/containers/storage.conf
 
           # Run bootc-image-builder
           podman run \
