@@ -9,5 +9,5 @@ platforms: linux/arm64
 #artifacts: false
 
 # Valid values: anaconda-iso, qcow2, vmdk, raw, ami, vhd, gce
-artifact_formats: raw
+#artifact_formats: raw
 
