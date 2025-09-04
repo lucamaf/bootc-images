@@ -536,19 +536,19 @@ jobs:
         run: |
           IMAGE="${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-${{ matrix.dir }}:${{ steps.version.outputs.version }}-${{ matrix.arch }}"
           echo "Pulling bootc image: $IMAGE"
-          podman pull "$IMAGE"
+          sudo podman pull "$IMAGE"
 
       - name: Create bootc artifact with bootc-image-builder
         run: |
           set -euo pipefail
 
           IMAGE="${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-${{ matrix.dir }}:${{ steps.version.outputs.version }}-${{ matrix.arch }}"
-          mkdir -p output
+          sudo mkdir -p output
 
           echo "Creating ${{ matrix.format }} artifact for $IMAGE"
 
           # Run bootc-image-builder
-          podman run \
+          sudo podman run \
             --rm \
             --privileged \
             --pull=newer \
@@ -562,7 +562,8 @@ jobs:
 
           # List created files
           echo "Created artifacts:"
-          ls -la output/
+          sudo ls -la output/
+          sudo chmod -R 777 output/
 
           # Verify we have the expected output
           if [ ! "$(ls -A output/)" ]; then
