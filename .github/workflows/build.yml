@@ -445,17 +445,13 @@ jobs:
     env:
       # Disable Subscription Manager container passthrough
       SMDEV_CONTAINER_OFF: 1
-      SOURCE_REGISTRY_HOST: "registry.redhat.io"
       # Destination registry configuration
       DEST_REGISTRY_HOST: "${{ vars.DEST_REGISTRY_HOST || 'ghcr.io' }}"
       DEST_REGISTRY_USER: "${{ vars.DEST_REGISTRY_USER || github.repository_owner }}"
       DEST_REGISTRY_PASSWORD: "${{ secrets.DEST_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}"
     container:
-      image: registry.redhat.io/rhel9/bootc-image-builder:latest
+      image: quay.io/centos-bootc/bootc-image-builder:latest
       options: --privileged --user root
-      credentials:
-        username: ${{ secrets.REDHAT_USERNAME }}
-        password: ${{ secrets.REDHAT_PASSWORD }}
     permissions:
       contents: write
       packages: write
