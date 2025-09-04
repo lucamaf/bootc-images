@@ -434,238 +434,238 @@ jobs:
         run: subscription-manager unregister
 
 # Matrix job: Build installable artifacts for each (directory, platform, format)
-build-artifacts:
-  name: Build ${{ matrix.dir }} artifacts (${{ matrix.arch }}, ${{ matrix.format }})
-  needs: [setup, build-image]
-  if: needs.setup.outputs.has_artifacts == 'true'
-  strategy:
-    fail-fast: false
-    matrix: ${{ fromJson(needs.setup.outputs.artifact_matrix) }}
-  # Use larger runners with more disk space for artifact creation
-  runs-on: ubuntu-latest-4-cores  # ~84GB disk vs ~14GB on ubuntu-latest
-  env:
-    # Disable Subscription Manager container passthrough
-    SMDEV_CONTAINER_OFF: 1
-    # Destination registry configuration
-    DEST_REGISTRY_HOST: "${{ vars.DEST_REGISTRY_HOST || 'ghcr.io' }}"
-    DEST_REGISTRY_USER: "${{ vars.DEST_REGISTRY_USER || github.repository_owner }}"
-    DEST_REGISTRY_PASSWORD: "${{ secrets.DEST_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}"
-  container:
-    image: quay.io/centos-bootc/bootc-image-builder:latest
-    options: --privileged --user root
-  permissions:
-    contents: write
-    packages: write
-  steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+  build-artifacts:
+    name: Build ${{ matrix.dir }} artifacts (${{ matrix.arch }}, ${{ matrix.format }})
+    needs: [setup, build-image]
+    if: needs.setup.outputs.has_artifacts == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.artifact_matrix) }}
+    # Use larger runners with more disk space for artifact creation
+    runs-on: ubuntu-latest-4-cores  # ~84GB disk vs ~14GB on ubuntu-latest
+    env:
+      # Disable Subscription Manager container passthrough
+      SMDEV_CONTAINER_OFF: 1
+      # Destination registry configuration
+      DEST_REGISTRY_HOST: "${{ vars.DEST_REGISTRY_HOST || 'ghcr.io' }}"
+      DEST_REGISTRY_USER: "${{ vars.DEST_REGISTRY_USER || github.repository_owner }}"
+      DEST_REGISTRY_PASSWORD: "${{ secrets.DEST_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}"
+    container:
+      image: quay.io/centos-bootc/bootc-image-builder:latest
+      options: --privileged --user root
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Check available disk space
-      run: |
-        echo "=== Disk space before cleanup ==="
-        df -h
-        echo "=== Container storage info ==="
-        podman info --format=json | jq '.store'
+      - name: Check available disk space
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h
+          echo "=== Container storage info ==="
+          podman info --format=json | jq '.store'
 
-    - name: Free up disk space
-      run: |
-        echo "Cleaning up to free disk space..."
-        
-        # Clean package cache
-        dnf clean all
-        
-        # Clean up container storage
-        podman system prune -a -f || true
-        buildah system prune -a -f || true
-        
-        # Remove any stopped containers
-        podman container rm --all --force || true
-        
-        # Clean up any unused volumes
-        podman volume prune -f || true
-        
-        echo "=== Disk space after cleanup ==="
-        df -h
+      - name: Free up disk space
+        run: |
+          echo "Cleaning up to free disk space..."
+          
+          # Clean package cache
+          dnf clean all
+          
+          # Clean up container storage
+          podman system prune -a -f || true
+          buildah system prune -a -f || true
+          
+          # Remove any stopped containers
+          podman container rm --all --force || true
+          
+          # Clean up any unused volumes
+          podman volume prune -f || true
+          
+          echo "=== Disk space after cleanup ==="
+          df -h
 
-    - name: Get container tools in UBI builder
-      run: dnf -y install podman buildah skopeo jq 
+      - name: Get container tools in UBI builder
+        run: dnf -y install podman buildah skopeo jq 
 
-    - name: Register with Red Hat subscription manager
-      run: |
-        if [ -n "${{ secrets.RHT_ORGID }}" ] && [ -n "${{ secrets.RHT_ACT_KEY }}" ]; then
-          echo "Registering with organization ID and activation key..."
-          subscription-manager register --org=${{ secrets.RHT_ORGID }} --activationkey=${{ secrets.RHT_ACT_KEY }}
-        else
-          echo "Registering with username and password..."
-          subscription-manager register --username=${{ secrets.RH_USERNAME }} --password=${{ secrets.RH_PASSWORD }}
-        fi
-
-    # workaround for https://github.com/redhat-actions/podman-login/issues/42
-    - name: Workaround open podman-login action issue
-      env:
-        auth: "{ \"auths\": {} }"
-      run: |
-        mkdir -p $HOME/.docker
-        echo "$auth" > $HOME/.docker/config.json
-
-    - name: Log in to GitHub Container Registry
-      uses: redhat-actions/podman-login@v1
-      with:
-        registry: ${{ env.DEST_REGISTRY_HOST }}
-        username: ${{ env.DEST_REGISTRY_USER }}
-        password: ${{ env.DEST_REGISTRY_PASSWORD }}
-        auth_file_path: /run/containers/0/auth.json
-
-    - name: Determine image version
-      id: version
-      shell: bash
-      run: |
-        set -euo pipefail
-
-        IMAGE_NAME="bootc-${{ matrix.dir }}"
-        IMAGE_BASE="${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/${IMAGE_NAME}"
-
-        echo "Determining version for: $IMAGE_BASE"
-
-        # Get existing tags from the registry using skopeo
-        EXISTING_TAGS=""
-        if skopeo list-tags "docker://${IMAGE_BASE}" >/tmp/tags.json 2>/dev/null; then
-          EXISTING_TAGS=$(jq -r '.Tags[]' /tmp/tags.json 2>/dev/null | \
-            grep -oE '^v[0-9]+$' | \
-            sort -V || echo "")
-          echo "Found existing tags: $EXISTING_TAGS"
-        else
-          echo "No existing tags found or repository doesn't exist yet"
-        fi
-
-        if [ -z "$EXISTING_TAGS" ]; then
-          echo "No existing version tags found, starting with v1"
-          CURRENT_TAG="v1"
-        else
-          # Find the highest version number - this should be the one just built
-          HIGHEST_VERSION=$(echo "$EXISTING_TAGS" | tail -n1)
-          # Check if platform-specific tag exists for incremented version
-          HIGHEST_NUM=$(echo "$HIGHEST_VERSION" | sed 's/v//')
-          INCREMENTED_VERSION="v$((HIGHEST_NUM + 1))"
-
-          if skopeo inspect "docker://${IMAGE_BASE}:${INCREMENTED_VERSION}-${{ matrix.arch }}" >/dev/null 2>&1; then
-            CURRENT_TAG="$INCREMENTED_VERSION"
-            echo "Using incremented version: $CURRENT_TAG"
+      - name: Register with Red Hat subscription manager
+        run: |
+          if [ -n "${{ secrets.RHT_ORGID }}" ] && [ -n "${{ secrets.RHT_ACT_KEY }}" ]; then
+            echo "Registering with organization ID and activation key..."
+            subscription-manager register --org=${{ secrets.RHT_ORGID }} --activationkey=${{ secrets.RHT_ACT_KEY }}
           else
-            CURRENT_TAG="$HIGHEST_VERSION"
-            echo "Using highest existing version: $CURRENT_TAG"
+            echo "Registering with username and password..."
+            subscription-manager register --username=${{ secrets.RH_USERNAME }} --password=${{ secrets.RH_PASSWORD }}
           fi
-        fi
 
-        echo "VERSION_TAG=$CURRENT_TAG" | tee -a "$GITHUB_ENV"
-        echo "version=$CURRENT_TAG" >> "$GITHUB_OUTPUT"
+      # workaround for https://github.com/redhat-actions/podman-login/issues/42
+      - name: Workaround open podman-login action issue
+        env:
+          auth: "{ \"auths\": {} }"
+        run: |
+          mkdir -p $HOME/.docker
+          echo "$auth" > $HOME/.docker/config.json
 
-    - name: Pull bootc image for artifact creation
-      run: |
-        IMAGE="${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-${{ matrix.dir }}:${{ steps.version.outputs.version }}-${{ matrix.arch }}"
-        echo "Pulling bootc image: $IMAGE"
-        podman pull "$IMAGE"
+      - name: Log in to GitHub Container Registry
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ${{ env.DEST_REGISTRY_HOST }}
+          username: ${{ env.DEST_REGISTRY_USER }}
+          password: ${{ env.DEST_REGISTRY_PASSWORD }}
+          auth_file_path: /run/containers/0/auth.json
 
-    - name: Create workspace and check space before artifact creation
-      run: |
-        # Create output directory and workspace
-        mkdir -p output
-        mkdir -p /tmp/bootc-workspace
-        
-        # Check space before starting
-        echo "=== Disk space before artifact creation ==="
-        df -h
-        
-        # Ensure we have at least 15GB free for artifact creation
-        AVAILABLE=$(df / --output=avail -B1G | tail -1 | tr -d ' ')
-        if [ "$AVAILABLE" -lt 15 ]; then
-          echo "WARNING: Only ${AVAILABLE}GB available. Artifact creation may fail."
-          echo "Consider using larger runners if this job fails."
-        fi
+      - name: Determine image version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
 
-    - name: Create bootc artifact with bootc-image-builder
-      run: |
-        set -euo pipefail
+          IMAGE_NAME="bootc-${{ matrix.dir }}"
+          IMAGE_BASE="${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/${IMAGE_NAME}"
 
-        IMAGE="${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-${{ matrix.dir }}:${{ steps.version.outputs.version }}-${{ matrix.arch }}"
+          echo "Determining version for: $IMAGE_BASE"
 
-        echo "Creating ${{ matrix.format }} artifact for $IMAGE"
+          # Get existing tags from the registry using skopeo
+          EXISTING_TAGS=""
+          if skopeo list-tags "docker://${IMAGE_BASE}" >/tmp/tags.json 2>/dev/null; then
+            EXISTING_TAGS=$(jq -r '.Tags[]' /tmp/tags.json 2>/dev/null | \
+              grep -oE '^v[0-9]+$' | \
+              sort -V || echo "")
+            echo "Found existing tags: $EXISTING_TAGS"
+          else
+            echo "No existing tags found or repository doesn't exist yet"
+          fi
 
-        # Run bootc-image-builder with optimized settings
-        podman run \
-          --rm \
-          --privileged \
-          --pull=newer \
-          --security-opt label=type:unconfined_t \
-          -v ./output:/output \
-          -v /tmp/bootc-workspace:/tmp \
-          -v /var/lib/containers/storage:/var/lib/containers/storage \
-          -e TMPDIR=/tmp \
-          quay.io/centos-bootc/bootc-image-builder:latest \
-          --type ${{ matrix.format }} \
-          --use-librepo=True \
-          "$IMAGE"
+          if [ -z "$EXISTING_TAGS" ]; then
+            echo "No existing version tags found, starting with v1"
+            CURRENT_TAG="v1"
+          else
+            # Find the highest version number - this should be the one just built
+            HIGHEST_VERSION=$(echo "$EXISTING_TAGS" | tail -n1)
+            # Check if platform-specific tag exists for incremented version
+            HIGHEST_NUM=$(echo "$HIGHEST_VERSION" | sed 's/v//')
+            INCREMENTED_VERSION="v$((HIGHEST_NUM + 1))"
 
-        # List created files
-        echo "Created artifacts:"
-        ls -la output/
+            if skopeo inspect "docker://${IMAGE_BASE}:${INCREMENTED_VERSION}-${{ matrix.arch }}" >/dev/null 2>&1; then
+              CURRENT_TAG="$INCREMENTED_VERSION"
+              echo "Using incremented version: $CURRENT_TAG"
+            else
+              CURRENT_TAG="$HIGHEST_VERSION"
+              echo "Using highest existing version: $CURRENT_TAG"
+            fi
+          fi
 
-        # Verify we have the expected output
-        if [ ! "$(ls -A output/)" ]; then
-          echo "ERROR: No artifacts were created!"
-          exit 1
-        fi
+          echo "VERSION_TAG=$CURRENT_TAG" | tee -a "$GITHUB_ENV"
+          echo "version=$CURRENT_TAG" >> "$GITHUB_OUTPUT"
 
-        # Show disk space after artifact creation
-        echo "=== Disk space after artifact creation ==="
-        df -h
+      - name: Pull bootc image for artifact creation
+        run: |
+          IMAGE="${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-${{ matrix.dir }}:${{ steps.version.outputs.version }}-${{ matrix.arch }}"
+          echo "Pulling bootc image: $IMAGE"
+          podman pull "$IMAGE"
 
-    - name: Create scratch container image with artifact
-      id: artifact_image
-      run: |
-        set -euo pipefail
+      - name: Create workspace and check space before artifact creation
+        run: |
+          # Create output directory and workspace
+          mkdir -p output
+          mkdir -p /tmp/bootc-workspace
+          
+          # Check space before starting
+          echo "=== Disk space before artifact creation ==="
+          df -h
+          
+          # Ensure we have at least 15GB free for artifact creation
+          AVAILABLE=$(df / --output=avail -B1G | tail -1 | tr -d ' ')
+          if [ "$AVAILABLE" -lt 15 ]; then
+            echo "WARNING: Only ${AVAILABLE}GB available. Artifact creation may fail."
+            echo "Consider using larger runners if this job fails."
+          fi
 
-        ARTIFACT_IMAGE_NAME="${{ env.DEST_REGISTRY_USER }}/bootc-${{ matrix.dir }}-${{ matrix.format }}"
-        ARTIFACT_IMAGE_TAG="${{ steps.version.outputs.version }}-${{ matrix.arch }}"
+      - name: Create bootc artifact with bootc-image-builder
+        run: |
+          set -euo pipefail
 
-        echo "Creating scratch image: $ARTIFACT_IMAGE_NAME:$ARTIFACT_IMAGE_TAG"
+          IMAGE="${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-${{ matrix.dir }}:${{ steps.version.outputs.version }}-${{ matrix.arch }}"
 
-        # Create a simple Containerfile for the scratch image
-        cat > Containerfile.artifact << 'EOF'
-        FROM scratch
-        COPY output/ /
-        EOF
+          echo "Creating ${{ matrix.format }} artifact for $IMAGE"
 
-        # Build the scratch image containing the artifacts
-        buildah bud \
-          --tag "$ARTIFACT_IMAGE_NAME:$ARTIFACT_IMAGE_TAG" \
-          --file Containerfile.artifact \
-          .
+          # Run bootc-image-builder with optimized settings
+          podman run \
+            --rm \
+            --privileged \
+            --pull=newer \
+            --security-opt label=type:unconfined_t \
+            -v ./output:/output \
+            -v /tmp/bootc-workspace:/tmp \
+            -v /var/lib/containers/storage:/var/lib/containers/storage \
+            -e TMPDIR=/tmp \
+            quay.io/centos-bootc/bootc-image-builder:latest \
+            --type ${{ matrix.format }} \
+            --use-librepo=True \
+            "$IMAGE"
 
-        echo "artifact_image=$ARTIFACT_IMAGE_NAME" >> "$GITHUB_OUTPUT"
-        echo "artifact_tag=$ARTIFACT_IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          # List created files
+          echo "Created artifacts:"
+          ls -la output/
 
-    - name: Push artifact image to registry
-      uses: redhat-actions/push-to-registry@v2
-      with:
-        image: ${{ steps.artifact_image.outputs.artifact_image }}
-        tags: ${{ steps.artifact_image.outputs.artifact_tag }}
-        registry: ${{ env.DEST_REGISTRY_HOST }}
+          # Verify we have the expected output
+          if [ ! "$(ls -A output/)" ]; then
+            echo "ERROR: No artifacts were created!"
+            exit 1
+          fi
 
-    - name: Clean up workspace and show final disk usage
-      if: always()
-      run: |
-        # Clean up the workspace
-        rm -rf /tmp/bootc-workspace
-        rm -rf output
-        
-        # Final disk space check
-        echo "=== Final disk space ==="
-        df -h
+          # Show disk space after artifact creation
+          echo "=== Disk space after artifact creation ==="
+          df -h
 
-    - name: Clean up the subscription
-      if: always()
-      run: subscription-manager unregister
+      - name: Create scratch container image with artifact
+        id: artifact_image
+        run: |
+          set -euo pipefail
+
+          ARTIFACT_IMAGE_NAME="${{ env.DEST_REGISTRY_USER }}/bootc-${{ matrix.dir }}-${{ matrix.format }}"
+          ARTIFACT_IMAGE_TAG="${{ steps.version.outputs.version }}-${{ matrix.arch }}"
+
+          echo "Creating scratch image: $ARTIFACT_IMAGE_NAME:$ARTIFACT_IMAGE_TAG"
+
+          # Create a simple Containerfile for the scratch image
+          cat > Containerfile.artifact << 'EOF'
+          FROM scratch
+          COPY output/ /
+          EOF
+
+          # Build the scratch image containing the artifacts
+          buildah bud \
+            --tag "$ARTIFACT_IMAGE_NAME:$ARTIFACT_IMAGE_TAG" \
+            --file Containerfile.artifact \
+            .
+
+          echo "artifact_image=$ARTIFACT_IMAGE_NAME" >> "$GITHUB_OUTPUT"
+          echo "artifact_tag=$ARTIFACT_IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Push artifact image to registry
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.artifact_image.outputs.artifact_image }}
+          tags: ${{ steps.artifact_image.outputs.artifact_tag }}
+          registry: ${{ env.DEST_REGISTRY_HOST }}
+
+      - name: Clean up workspace and show final disk usage
+        if: always()
+        run: |
+          # Clean up the workspace
+          rm -rf /tmp/bootc-workspace
+          rm -rf output
+          
+          # Final disk space check
+          echo "=== Final disk space ==="
+          df -h
+
+      - name: Clean up the subscription
+        if: always()
+        run: subscription-manager unregister
 
   # Job: Create multi-platform manifests for each changed directory
   create-manifest:
