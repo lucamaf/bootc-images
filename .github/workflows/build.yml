@@ -460,7 +460,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Get container tools in UBI builder
-        run: dnf -y install podman buildah skopeo jq 
+        run: |
+          dnf -y install podman buildah skopeo jq 
+          dnf clean all
 
       - name: Register with Red Hat subscription manager
         run: |
