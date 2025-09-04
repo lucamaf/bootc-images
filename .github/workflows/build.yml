@@ -100,8 +100,13 @@ jobs:
               create_artifacts="auto"
             fi
 
-            # Use the same platforms as the directory's platforms (no separate artifact_platforms)
-            echo "$create_artifacts,$artifact_formats,$dir_platforms"
+            # Set default artifact formats if none specified but artifacts are enabled
+            if [ -z "$artifact_formats" ] && [ "$create_artifacts" != "false" ]; then
+              artifact_formats="$default_formats"
+            fi
+
+            # Use pipe as delimiter to avoid comma conflicts with format lists
+            echo "$create_artifacts|$artifact_formats|$dir_platforms"
           }
 
           # Function to check if artifacts exist for an image
@@ -214,10 +219,11 @@ jobs:
               # Handle artifact configuration
               IMAGE_BASE="${{ vars.DEST_REGISTRY_HOST || 'ghcr.io' }}/${{ vars.DEST_REGISTRY_USER || github.repository_owner }}/bootc-$DIR"
               ARTIFACT_CONFIG=$(get_artifact_config "$DIR" "$FORMATS" "$ALLOWED_PLATFORMS")
-              IFS=',' read -ra CONFIG_PARTS <<< "$ARTIFACT_CONFIG"
+              IFS='|' read -ra CONFIG_PARTS <<< "$ARTIFACT_CONFIG"
               CREATE_ARTIFACTS="${CONFIG_PARTS[0]}"
               ARTIFACT_FORMATS="${CONFIG_PARTS[1]:-$FORMATS}"
               ARTIFACT_PLATFORMS="${CONFIG_PARTS[2]}"
+
 
               echo "Directory $DIR artifact config - create: $CREATE_ARTIFACTS, formats: $ARTIFACT_FORMATS, platforms: $ARTIFACT_PLATFORMS"
 
@@ -843,10 +849,12 @@ jobs:
 
             # Group by directory and show formats/platforms
             for DIR in "${DIRS[@]}"; do
-              ARTIFACT_CONFIG=$(get_artifact_config "$DIR")
-              IFS=',' read -ra CONFIG_PARTS <<< "$ARTIFACT_CONFIG"
+              ARTIFACT_CONFIG=$(get_artifact_config "$DIR" "$FORMATS" "$ALLOWED_PLATFORMS")
+              IFS='|' read -ra CONFIG_PARTS <<< "$ARTIFACT_CONFIG"
               CREATE_ARTIFACTS="${CONFIG_PARTS[0]}"
-              ARTIFACT_FORMATS="${CONFIG_PARTS[1]}"
+              ARTIFACT_FORMATS="${CONFIG_PARTS[1]:-$FORMATS}"
+              ARTIFACT_PLATFORMS="${CONFIG_PARTS[2]}"
+
 
               # Check if this directory has artifacts in the matrix
               DIR_FORMATS=$(echo "$ARTIFACT_MATRIX_JSON" | jq -r --arg dir "$DIR" '.include[] | select(.dir == $dir) | .format' | sort -u | tr '\n' ',' | sed 's/,$//')
