@@ -2,6 +2,3 @@ FROM registry.redhat.io/rhel9/rhel-bootc:9.6
 
 RUN dnf install -y tmux  \
     && dnf clean all
-
-  
-    

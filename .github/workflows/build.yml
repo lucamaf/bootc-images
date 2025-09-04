@@ -441,8 +441,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.artifact_matrix) }}
-    # Use larger runners with more disk space for artifact creation
-    runs-on: ubuntu-latest  # ~14GB on ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     env:
       # Disable Subscription Manager container passthrough
       SMDEV_CONTAINER_OFF: 1
@@ -459,33 +458,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Check available disk space
-        run: |
-          echo "=== Disk space before cleanup ==="
-          df -h
-          echo "=== Container storage info ==="
-          podman info --format=json | jq '.store'
-
-      - name: Free up disk space
-        run: |
-          echo "Cleaning up to free disk space..."
-          
-          # Clean package cache
-          dnf clean all
-          
-          # Clean up container storage
-          podman system prune -a -f || true
-          buildah system prune -a -f || true
-          
-          # Remove any stopped containers
-          podman container rm --all --force || true
-          
-          # Clean up any unused volumes
-          podman volume prune -f || true
-          
-          echo "=== Disk space after cleanup ==="
-          df -h
 
       - name: Get container tools in UBI builder
         run: dnf -y install podman buildah skopeo jq 
@@ -566,41 +538,28 @@ jobs:
           echo "Pulling bootc image: $IMAGE"
           podman pull "$IMAGE"
 
-      - name: Create workspace and check space before artifact creation
+      - name: Check available disk space
         run: |
-          # Create output directory and workspace
-          mkdir -p output
-          mkdir -p /tmp/bootc-workspace
-          
-          # Check space before starting
-          echo "=== Disk space before artifact creation ==="
+          echo "=== Disk space before cleanup ==="
           df -h
-          
-          # Ensure we have at least 15GB free for artifact creation
-          AVAILABLE=$(df / --output=avail -B1G | tail -1 | tr -d ' ')
-          if [ "$AVAILABLE" -lt 15 ]; then
-            echo "WARNING: Only ${AVAILABLE}GB available. Artifact creation may fail."
-            echo "Consider using larger runners if this job fails."
-          fi
 
       - name: Create bootc artifact with bootc-image-builder
         run: |
           set -euo pipefail
 
           IMAGE="${{ env.DEST_REGISTRY_HOST }}/${{ env.DEST_REGISTRY_USER }}/bootc-${{ matrix.dir }}:${{ steps.version.outputs.version }}-${{ matrix.arch }}"
+          mkdir -p output
 
           echo "Creating ${{ matrix.format }} artifact for $IMAGE"
 
-          # Run bootc-image-builder with optimized settings
+          # Run bootc-image-builder
           podman run \
             --rm \
             --privileged \
             --pull=newer \
             --security-opt label=type:unconfined_t \
             -v ./output:/output \
-            -v /tmp/bootc-workspace:/tmp \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
-            -e TMPDIR=/tmp \
             quay.io/centos-bootc/bootc-image-builder:latest \
             --type ${{ matrix.format }} \
             --use-librepo=True \
@@ -615,10 +574,6 @@ jobs:
             echo "ERROR: No artifacts were created!"
             exit 1
           fi
-
-          # Show disk space after artifact creation
-          echo "=== Disk space after artifact creation ==="
-          df -h
 
       - name: Create scratch container image with artifact
         id: artifact_image
@@ -651,17 +606,6 @@ jobs:
           image: ${{ steps.artifact_image.outputs.artifact_image }}
           tags: ${{ steps.artifact_image.outputs.artifact_tag }}
           registry: ${{ env.DEST_REGISTRY_HOST }}
-
-      - name: Clean up workspace and show final disk usage
-        if: always()
-        run: |
-          # Clean up the workspace
-          rm -rf /tmp/bootc-workspace
-          rm -rf output
-          
-          # Final disk space check
-          echo "=== Final disk space ==="
-          df -h
 
       - name: Clean up the subscription
         if: always()
