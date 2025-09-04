@@ -3,7 +3,7 @@
 # The packages from NVIDIA's repo are only built for specific versions of RHEL, be sure to pin the exact tag
 FROM registry.redhat.io/rhel9/rhel-bootc@sha256:031d9c863945013c82c7c087ac7eff5f4d608658374cbe06085c59762e1bdd65
 
-#########
+##########
 # Install NVIDIA jetpack components
 # Mask nvpower.service (causes kernel panic)
 # Remove upstream host1x kernel module (conflicts with nvidia provided one)
@@ -16,7 +16,7 @@ RUN dnf -y install /tmp/artifact/*.rpm && \
     systemctl mask nvfancontrol.service nvpmodel.service nvpower.service && \
     rm -r /tmp/artifact && \
     rm /usr/lib/modules/*/kernel/drivers/gpu/host1x/host1x.ko.xz
-#########
+##########
 
 # Regenerate initrd (just in case)
 RUN set -x; kver=$(cd /usr/lib/modules && echo *); dracut -vf /usr/lib/modules/$kver/initramfs.img $kver

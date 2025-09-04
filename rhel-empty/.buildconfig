@@ -1,9 +1,11 @@
 # .buildconfig file for restricting builds to specific architectures
 
 # Valid values: linux/amd64, linux/arm64
-# Example->   platforms: linux/amd64,linux/arm64
 #platforms: linux/arm64
 
+##### INSTALLABLE ARTIFACTS
+artifacts: true
+
 # Valid values: anaconda-iso, qcow2, vmdk, raw, ami, vhd, gce
-# Example->  artifact_formats: anaconda-iso,qcow2 
 artifact_formats: anaconda-iso,qcow2,vmdk,raw,ami,vhd,gce
+
