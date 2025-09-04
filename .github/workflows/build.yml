@@ -112,18 +112,27 @@ jobs:
           # Function to check if artifacts exist for an image
           check_existing_artifacts() {
             local image_base="$1"
-            local existing_tags=""
-
-            if skopeo list-tags "docker://${image_base}" >/tmp/check_tags.json 2>/dev/null; then
-              existing_tags=$(jq -r '.Tags[]' /tmp/check_tags.json 2>/dev/null | \
-                grep -E '-(anaconda-iso|qcow2|vmdk|raw|ami|vhd|gce)$' || echo "")
-            fi
-
-            if [ -n "$existing_tags" ]; then
-              echo "true"
-            else
-              echo "false"
-            fi
+            local artifact_formats="$2"
+            
+            # Check each artifact format separately
+            IFS=',' read -ra FORMAT_ARRAY <<< "$artifact_formats"
+            
+            for format in "${FORMAT_ARRAY[@]}"; do
+              local artifact_image_base="${image_base}-${format}"
+              local existing_tags=""
+              
+              if skopeo list-tags "docker://${artifact_image_base}" >/tmp/check_tags_${format}.json 2>/dev/null; then
+                existing_tags=$(jq -r '.Tags[]' /tmp/check_tags_${format}.json 2>/dev/null | \
+                  grep -E '^v[0-9]+(-[^-]+)?$' || echo "")
+                
+                if [ -n "$existing_tags" ]; then
+                  echo "true"
+                  return 0
+                fi
+              fi
+            done
+            
+            echo "false"
           }
 
           # Detect changed top-level directories between the previous and current commit (push)
@@ -235,7 +244,7 @@ jobs:
                 SHOULD_CREATE=false
               elif [ "$CREATE_ARTIFACTS" = "auto" ]; then
                 # Check if artifacts already exist
-                EXISTING_ARTIFACTS=$(check_existing_artifacts "$IMAGE_BASE")
+                EXISTING_ARTIFACTS=$(check_existing_artifacts "$IMAGE_BASE" "$ARTIFACT_FORMATS")
                 if [ "$EXISTING_ARTIFACTS" = "false" ]; then
                   SHOULD_CREATE=true
                   # Use default format if none specified
