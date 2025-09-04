@@ -547,6 +547,8 @@ jobs:
 
           echo "Creating ${{ matrix.format }} artifact for $IMAGE"
 
+          sed -i 's/^driver = .*/driver = "vfs"/' /etc/containers/storage.conf
+
           # Run bootc-image-builder
           podman run \
             --rm \
