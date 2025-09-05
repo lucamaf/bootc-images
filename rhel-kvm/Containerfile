@@ -7,10 +7,10 @@ RUN for drv in qemu network nodedev nwfilter secret storage interface; do system
 
 
 #////////////////////////////////////////
-#DEMO V2 update (cockpit )
+#DEMO V2 update (cockpit)
 #////////////////////////////////////////
-#RUN dnf install -y  cockpit cockpit-machines cockpit-podman cockpit-system cockpit-bridge cockpit-pcp cockpit-storaged cockpit-session-recording \
-#    && dnf clean all
-#
-#RUN systemctl enable cockpit.socket
+RUN dnf install -y  cockpit cockpit-machines cockpit-podman cockpit-system cockpit-bridge cockpit-pcp cockpit-storaged cockpit-session-recording \
+    && dnf clean all
+
+RUN systemctl enable cockpit.socket
 #////////////////////////////////////////
