@@ -29,6 +29,7 @@ Store your images in designated folders within the repository's root directory. 
 
 3. **Build Artifacts** (Optional)
    - Uses `bootc-image-builder` to create installable artifacts
+   - Supports custom artifact configuration via optional `config.toml` files
    - Packages artifacts into container images for easy distribution
    - Supports multiple formats and platforms simultaneously
 
@@ -151,6 +152,20 @@ artifacts: true|false|auto    # default: auto (create if none exist)
 artifact_formats: anaconda-iso,qcow2,vmdk
 ```
 
+### config.toml File for Artifact Customization
+
+You can customize installable artifacts by adding an optional `config.toml` file to any image directory. This file will be passed to `bootc-image-builder` to configure the artifact creation process.
+
+The `config.toml` file supports various configuration options such as:
+- User accounts and SSH keys
+- Filesystem customizations
+- Network configuration
+- Package installation/removal
+- System services configuration
+- And other bootc-image-builder options
+
+**Important**: The `config.toml` file is completely optional. If it doesn't exist, artifacts will be created with default settings.
+
 ### Restricting Build Architectures
 
 To restrict an image to specific architectures:
@@ -189,18 +204,45 @@ artifacts: auto
 ```
 my-arm64-only-image/
 ├── Containerfile
+├── config.toml           # Optional: Custom artifact configuration
 ├── .buildconfig          # Contains: platforms: linux/arm64
 └── other-files...
 
 my-image-with-artifacts/
 ├── Containerfile
+├── config.toml           # Optional: Custom artifact configuration
 ├── .buildconfig          # Contains: artifacts: true, artifact_formats: anaconda-iso,qcow2
 └── other-files...
 
 my-regular-image/
 ├── Containerfile         # No .buildconfig = builds for all platforms, auto artifacts
+├── config.toml           # Optional: Custom artifact configuration
+└── other-files...
+
+my-minimal-image/
+├── Containerfile         # No config files = default behavior
 └── other-files...
 ```
+
+### Example config.toml File
+
+Here's an example `config.toml` file that creates a user account with sudo access:
+
+```toml
+[[user]]
+name = "admin"
+password = "$6$rounds=4096$..."  # Use 'openssl passwd -6' to generate
+key = "ssh-rsa AAAAB3NzaC1yc2E... user@host"
+groups = ["wheel"]
+
+[customizations.kernel]
+append = "console=ttyS0,115200n8"
+
+[[customizations.services]]
+enabled = ["sshd"]
+```
+
+For more configuration options, consult the bootc-image-builder documentation.
 
 ---
 
