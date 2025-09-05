@@ -563,7 +563,16 @@ jobs:
 
           echo "Creating ${{ matrix.format }} artifact for $IMAGE"
 
-          # Run bootc-image-builder
+          # Check if config.toml exists in the directory
+          CONFIG_MOUNT=""
+          if [ -f "./${{ matrix.dir }}/config.toml" ]; then
+            echo "Found config.toml for ${{ matrix.dir }}, will mount it"
+            CONFIG_MOUNT="-v ./${{ matrix.dir }}/config.toml:/config.toml:ro"
+          else
+            echo "No config.toml found for ${{ matrix.dir }}, proceeding without custom configuration"
+          fi
+
+          # Run bootc-image-builder with conditional config mount
           podman run \
             --rm \
             --privileged \
@@ -571,6 +580,7 @@ jobs:
             --security-opt label=type:unconfined_t \
             -v ./output:/output \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
+            ${CONFIG_MOUNT} \
             quay.io/centos-bootc/bootc-image-builder:latest \
             --type ${{ matrix.format }} \
             --use-librepo=True \
