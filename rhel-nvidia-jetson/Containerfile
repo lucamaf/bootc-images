@@ -90,7 +90,7 @@ EOF
 
 ########### CUSTOMIZATIONS
  RUN dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm && \
-     dnf -y install pciutils python3-pip podman-compose && \
+     dnf -y install fuse-overlayfs pciutils usbutils python3-pip podman-compose && \
      pip3 install jetson-stats && \
      dnf -y clean all && \
      rm -rf /var/{cache,log} /var/lib/{dnf,rhsm} && \
