@@ -1,5 +1,6 @@
 [connection]
 id=enP8p1s0
+uuid=$(uuidgen)
 type=ethernet
 interface-name=enP8p1s0
 autoconnect=true

@@ -89,7 +89,14 @@ EOF
 
 
 ########### CUSTOMIZATIONS
+
+RUN dnf -y install pciutils python3-pip && \
+    pip3 install jetson-stats && \
+    dnf clean all
+
+
 ### Copy files
 COPY files/ /
 
+RUN chmod -R 600 /etc/NetworkManager/system-connections/
 
