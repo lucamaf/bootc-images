@@ -7,7 +7,7 @@ Image=nvcr.io/nvidia/tritonserver:25.03-py3
 ContainerName=triton-inference-gpu
 
 # Volume and mount configuration
-Volume=/models:/mnt/models:z
+Volume=/usr/share/models:/mnt/models:z
 Tmpfs=/dev/shm
 
 # Security and device configuration

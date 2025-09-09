@@ -102,8 +102,8 @@ COPY files/ /
 
 RUN chmod -R 600 /etc/NetworkManager/system-connections/ && \
     chmod 644 /etc/systemd/system-preset/99-hardhat-services.preset  && \
-    mkdir /models
+    mkdir -p /usr/share/models
 
 # Pull model from OCI registry
 #COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v1 /models/ /models
-COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v2 /models/ /models
+COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v2 /models/ /usr/share/models
