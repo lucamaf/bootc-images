@@ -101,7 +101,8 @@ EOF
 COPY files/ /
 
 RUN chmod -R 600 /etc/NetworkManager/system-connections/ && \
-    chmod 644 /etc/systemd/system-preset/99-hardhat-services.preset  && \
+    chmod 644 /etc/systemd/system-preset/99-hardhat-services.preset && \
+    chmod +x /usr/local/bin/set-hostname-from-mac.sh && \
     mkdir -p /var/lib/models
 
 # Pull model from OCI registry
