@@ -101,15 +101,9 @@ EOF
 COPY files/ /
 
 RUN chmod -R 600 /etc/NetworkManager/system-connections/ && \
+    chmod 644 /etc/systemd/system-preset/99-hardhat-services.preset  && \
     mkdir /models
 
 # Pull model from OCI registry
 #COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v1 /models/ /models
 COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v2 /models/ /models
-
-# Replace the systemctl enable commands with systemd presets (Quadlets)
-RUN echo "enable triton-inference-gpu.service" > /etc/systemd/system-preset/99-triton-inference.preset && \
-    echo "enable hardhat-webcam.service" > /etc/systemd/system-preset/99-hardhat-webcam.preset && \
-    echo "enable hardhat-action.service" > /etc/systemd/system-preset/99-hardhat-action.preset && \
-    echo "enable hardhat-dashboard-backend.service" > /etc/systemd/system-preset/99-hardhat-dashboard-backend.preset && \
-    echo "enable hardhat-dashboard-frontend.service" > /etc/systemd/system-preset/99-hardhat-dashboard-frontend.preset
