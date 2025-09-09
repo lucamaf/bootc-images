@@ -101,4 +101,3 @@ EOF
 COPY files/ /
 
 RUN chmod -R 600 /etc/NetworkManager/system-connections/
-
