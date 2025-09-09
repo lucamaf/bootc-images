@@ -3,7 +3,7 @@ Description=Inference Server GPU Container
 After=local-fs.target
 
 [Container]
-Image=nvcr.io/nvidia/tritonserver:25.03-py3
+Image=nvcr.io/nvidia/tritonserver:25.03-py3-igpu
 ContainerName=triton-inference-gpu
 
 # NET
