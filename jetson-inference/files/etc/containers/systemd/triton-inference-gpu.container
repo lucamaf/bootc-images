@@ -1,0 +1,29 @@
+[Unit]
+Description=Inference Server GPU Container
+After=local-fs.target
+
+[Container]
+Image=nvcr.io/nvidia/tritonserver:25.03-py3
+ContainerName=inference-server-gpu
+
+# Volume and mount configuration
+Volume=/models:/mnt/models:z
+Tmpfs=/dev/shm
+
+# Security and device configuration
+SecurityLabelDisable=true
+Device=nvidia.com/gpu=all
+
+# Environment variables
+Environment=PORT=8000
+Environment=PORT=8001
+
+# Command to execute
+Exec=/bin/sh -c 'exec tritonserver "--model-repository=/mnt/models" "--allow-http=true" "--allow-sagemaker=false"'
+
+[Service]
+Restart=always
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target default.target
