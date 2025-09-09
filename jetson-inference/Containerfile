@@ -94,7 +94,8 @@ EOF
      dnf -y clean all && \
      rm -rf /var/{cache,log} /var/lib/{dnf,rhsm} && \
      systemctl enable podman.service && \
-     systemctl enable wpa_supplicant
+     systemctl enable wpa_supplicant && \
+     systemctl enable mac-hostname.service
 
 
 ### Copy files
