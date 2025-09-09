@@ -6,20 +6,23 @@ After=local-fs.target
 Image=nvcr.io/nvidia/tritonserver:25.03-py3
 ContainerName=triton-inference-gpu
 
+# NET
+Network=host
+
 # Volume and mount configuration
-Volume=/usr/share/models:/mnt/models:z
+Volume=/var/lib/models:/mnt/models:z
 Tmpfs=/dev/shm
 
 # Security and device configuration
 SecurityLabelDisable=true
-Device=nvidia.com/gpu=all
+AddDevice=nvidia.com/gpu=all
 
 # Environment variables
 Environment=PORT=8000
 Environment=PORT=8001
 
 # Command to execute
-Exec=/bin/sh -c 'exec tritonserver "--model-repository=/mnt/models" "--allow-http=true" "--allow-sagemaker=false"'
+Exec=/bin/sh -c 'exec tritonserver --model-repository=/mnt/models --allow-http=true --allow-sagemaker=false'
 
 [Service]
 Restart=always

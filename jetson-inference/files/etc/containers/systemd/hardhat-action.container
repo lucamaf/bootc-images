@@ -6,7 +6,7 @@ After=network-online.target
 [Container]
 Image=quay.io/luisarizmendi/object-detection-action:prod
 AutoUpdate=registry
-NetworkMode=host
+Network=host
 Environment=ALERT_ENDPOINT="http://localhost:5005/alert"
 Environment=ALIVE_ENDPOINT="http://localhost:5005/alive"
 Environment=DETECTIONS_ENDPOINT="http://localhost:5000/current_detections"

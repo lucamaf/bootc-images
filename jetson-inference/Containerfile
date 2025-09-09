@@ -91,7 +91,6 @@ EOF
 ########### CUSTOMIZATIONS
  RUN dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm && \
      dnf -y install pciutils usbutils python3-pip podman-compose && \
-     pip3 install jetson-stats && \
      dnf -y clean all && \
      rm -rf /var/{cache,log} /var/lib/{dnf,rhsm} && \
      systemctl enable podman.service
@@ -102,8 +101,8 @@ COPY files/ /
 
 RUN chmod -R 600 /etc/NetworkManager/system-connections/ && \
     chmod 644 /etc/systemd/system-preset/99-hardhat-services.preset  && \
-    mkdir -p /usr/share/models
+    mkdir -p /var/lib/models
 
 # Pull model from OCI registry
 #COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v1 /models/ /models
-COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v2 /models/ /usr/share/models
+COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v2 /models/ /var/lib/models

@@ -6,7 +6,7 @@ After=network-online.target
 [Container]
 Image=quay.io/luisarizmendi/object-detection-dashboard-backend:v1
 AutoUpdate=registry
-NetworkMode=host
+Network=host
 
 [Service]
 Restart=always
