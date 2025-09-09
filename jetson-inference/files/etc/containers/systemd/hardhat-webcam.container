@@ -4,6 +4,7 @@ Wants=network-online.target
 After=network-online.target
 
 [Container]
+PodmanArgs=--privileged
 Image=quay.io/luisarizmendi/object-detection-stream-manager:grpc
 AutoUpdate=registry
 Network=host

@@ -5,7 +5,7 @@ After=network-online.target
 Requires=hardhat-dashboard-backend.service
 
 [Container]
-Image=quay.io/luisarizmendi/object-detection-dashboard-frontend:v1
+Image=quay.io/luisarizmendi/object-detection-dashboard-frontend:prod
 AutoUpdate=registry
 Network=host
 Environment=BACKEND_API_BASE_URL=http://localhost:5005
