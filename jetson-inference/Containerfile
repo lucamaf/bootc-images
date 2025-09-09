@@ -103,8 +103,8 @@ COPY files/ /
 RUN chmod -R 600 /etc/NetworkManager/system-connections/ && \
     chmod 644 /etc/systemd/system-preset/99-hardhat-services.preset && \
     chmod +x /usr/local/bin/set-hostname-from-mac.sh && \
-    mkdir -p /var/lib/models
+    mkdir -p /etc/models
 
 # Pull model from OCI registry
 #COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v1 /models/ /models
-COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v2 /models/ /var/lib/models
+COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v2 /models/ /etc/models

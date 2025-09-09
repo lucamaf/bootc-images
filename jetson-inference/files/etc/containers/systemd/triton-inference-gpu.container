@@ -11,7 +11,7 @@ ContainerName=triton-inference-gpu
 Network=host
 
 # Volume and mount configuration
-Volume=/var/lib/models:/mnt/models:z
+Volume=/etc/models:/mnt/models:z
 Tmpfs=/dev/shm
 
 # Security and device configuration
