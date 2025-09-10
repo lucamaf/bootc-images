@@ -1,5 +1,0 @@
-enable triton-inference-gpu.service
-enable hardhat-webcam.service
-enable hardhat-action.service
-enable hardhat-dashboard-backend.service
-enable hardhat-dashboard-frontend.service
