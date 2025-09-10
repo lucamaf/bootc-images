@@ -100,12 +100,12 @@ EOF
 COPY files/ /
 
 RUN chmod -R 600 /etc/NetworkManager/system-connections/ && \
-    chmod -R 644 /etc/systemd/system-preset/ && \
     chmod +x /usr/local/bin/set-hostname-from-mac.sh && \
+    ln -s /etc/systemd/system/mac-hostname.service /etc/systemd/system/multi-user.target.wants/mac-hostname.service && \
     mkdir -p /etc/models
 
 # Pull model from OCI registry
-#COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v1 /models/ /models
-COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v2 /models/ /etc/models
+COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v1 /models/ /etc/models
+#COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v2 /models/ /etc/models
 
 
