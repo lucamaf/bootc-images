@@ -90,11 +90,10 @@ EOF
 
 ########### CUSTOMIZATIONS ###########
  RUN dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm && \
-     dnf -y install pciutils usbutils python3-pip podman-compose NetworkManager-wifi && \
+     dnf -y install pciutils usbutils python3-pip podman-compose && \
      dnf -y clean all && \
      rm -rf /var/{cache,log} /var/lib/{dnf,rhsm} && \
-     systemctl enable podman.service && \
-     systemctl enable wpa_supplicant 
+     systemctl enable podman.service 
 
 
 ### Copy files
