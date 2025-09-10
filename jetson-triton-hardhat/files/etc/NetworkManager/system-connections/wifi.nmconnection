@@ -5,12 +5,12 @@ autoconnect=true
 interface-name=wlP1p1s0
 
 [wifi]
-ssid=YOUR_WIFI_NAME
+ssid=MOVISTAR_BCC0
 mode=infrastructure
 
 [wifi-security]
 key-mgmt=wpa-psk
-psk=YOUR_WIFI_PASSWORD
+psk=nC8kXnsF62UiQhuD8Ppg
 
 [ipv4]
 method=auto
