@@ -19,9 +19,9 @@ RUN systemctl set-default graphical.target
 #////////////////////////////////////////
 #DEMO V2 update (cockpit)
 #////////////////////////////////////////
-RUN dnf install -y cockpit cockpit-podman cockpit-system cockpit-bridge cockpit-pcp cockpit-storaged cockpit-session-recording  \
-    && dnf clean all
-
-RUN systemctl enable cockpit.socket
+#RUN dnf install -y cockpit cockpit-podman cockpit-system cockpit-bridge cockpit-pcp cockpit-storaged cockpit-session-recording  \
+#    && dnf clean all
+#
+#RUN systemctl enable cockpit.socket
 #////////////////////////////////////////
  
