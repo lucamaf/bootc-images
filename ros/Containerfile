@@ -39,9 +39,13 @@ RUN dnf install -y \
 #    dnf install -y ros-kilted-desktop && \
 #    dnf clean all
 
-# Install from source
-RUN mkdir -p ~/ros2_kilted/src && \
-    cd ~/ros2_kilted && \
-    vcs import --input https://raw.githubusercontent.com/ros2/ros2/kilted/ros2.repos src  && \
-    rosdep update  && \
+# Install ROS2 from source
+RUN mkdir -p /root/ros2_kilted/src && \
+    cd /root/ros2_kilted && \
+    vcs import --input https://raw.githubusercontent.com/ros2/ros2/kilted/ros2.repos src
+
+# Initialize rosdep and install dependencies
+RUN rosdep init && \
+    rosdep update && \
+    cd /root/ros2_kilted && \
     rosdep install --from-paths src --ignore-src -y --skip-keys "fastcdr rti-connext-dds-7.3.0 urdfdom_headers"
