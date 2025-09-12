@@ -2,6 +2,7 @@
 
 platforms: linux/amd64
 
-#artifacts: true
+## TOO BIG FOR FREE GITHUB ACTIONS RUNNERS
+artifacts: false
 #artifact_formats: qcow2
 
