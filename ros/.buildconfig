@@ -1,6 +1,6 @@
 # .buildconfig file for restricting builds to specific architectures
 
-#platforms: linux/amd64
+platforms: linux/amd64
 
 #artifacts: true
 #artifact_formats: qcow2
