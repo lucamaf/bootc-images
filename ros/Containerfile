@@ -42,4 +42,5 @@ RUN mkdir -p /root/ros2_kilted/src && \
 RUN rosdep init && \
     rosdep update && \
     cd /root/ros2_kilted && \
-    rosdep install --from-paths src --ignore-src -y --skip-keys "fastcdr rti-connext-dds-7.3.0 urdfdom_headers"
+    rosdep install --from-paths src --ignore-src -y --skip-keys "fastcdr rti-connext-dds-7.3.0 urdfdom_headers" && \
+    colcon build --symlink-install
