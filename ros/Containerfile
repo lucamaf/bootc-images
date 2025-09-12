@@ -1,4 +1,3 @@
-# ---- builder stage ----
 FROM registry.redhat.io/rhel9/rhel-bootc:9.6 
 
 ENV LANG=en_US.UTF-8
@@ -10,9 +9,7 @@ RUN dnf install -y curl dnf-plugins-core langpacks-en glibc-langpack-en \
     dnf config-manager --set-enabled codeready-builder-for-rhel-$(rpm -E %rhel)-$(arch)-rpms && \
     dnf clean all
 
-
 RUN dnf install -y "https://github.com/ros-infrastructure/ros-apt-source/releases/download/$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}')/ros2-release-$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}')-1.noarch.rpm"
-
 
 # Development tools (optional)
 #RUN dnf install -y \
@@ -34,5 +31,14 @@ RUN dnf install -y "https://github.com/ros-infrastructure/ros-apt-source/release
 #        flake8-class-newline \
 #        flake8-deprecated && \
 #    dnf clean all
+
+RUN tee /etc/yum.repos.d/ros2.repo <<'EOF'
+[ros2]
+name=ROS 2
+baseurl=http://packages.ros.org/ros2/rhel/9/$basearch
+enabled=1
+gpgcheck=0
+releasever=9
+EOF
 
 RUN dnf install -y ros-kilted-desktop
