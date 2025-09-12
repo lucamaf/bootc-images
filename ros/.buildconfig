@@ -1,6 +1,7 @@
+# .buildconfig file for restricting builds to specific architectures
+
 #platforms: linux/amd64
 
-### TOO BIG FOR THE FREE GITHUB RUNNER
-artifacts: false
-
+#artifacts: true
+#artifact_formats: qcow2
 
