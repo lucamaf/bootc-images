@@ -56,8 +56,8 @@ EOF
 #    flake8-class-newline \
 #    flake8-deprecated 
 
-# Install ROS and dependencies to a temporary location first pointing to major version (no minor versions in this repo)
-RUN dnf install -y --releasever=9 --installroot=/tmp/ros-install ros-kilted-desktop \
+# Install dependencies
+RUN dnf install -y \
     spdlog-devel \
     lttng-ust \
     python3-typing-extensions \
@@ -66,6 +66,10 @@ RUN dnf install -y --releasever=9 --installroot=/tmp/ros-install ros-kilted-desk
     python3-psutil \
     python3-lark-parser \
     console-bridge-devel && \
+    dnf clean all
+
+# Install ROS to a temporary location first pointing to major version (no minor versions in this repo)
+RUN dnf install -y --releasever=9 --installroot=/tmp/ros-install ros-kilted-desktop  && \
     dnf clean all
 
 # Move ROS from /opt to /usr/local and create symlinks if needed
