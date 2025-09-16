@@ -10,17 +10,8 @@ RUN dnf install -y curl dnf-plugins-core langpacks-en glibc-langpack-en 'dnf-com
 
 RUN dnf install -y "https://github.com/ros-infrastructure/ros-apt-source/releases/download/$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}')/ros2-release-$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}')-1.noarch.rpm"
 
-RUN tee /etc/yum.repos.d/ros2.repo <<'EOF'
-[ros2]
-name=ROS 2
-baseurl=http://packages.ros.org/ros2/rhel/9/$basearch
-enabled=1
-gpgcheck=0
-releasever=9
-EOF
-
-# Install ROS to a temporary location first
-RUN dnf install -y --installroot=/tmp/ros-install ros-kilted-desktop && \
+# Install ROS to a temporary location first pointing to major version (no minor versions in this repo)
+RUN dnf install -y --releasever=9 --installroot=/tmp/ros-install ros-kilted-desktop && \
     dnf clean all
 
 # Move ROS from /opt to /usr/local and create symlinks if needed
