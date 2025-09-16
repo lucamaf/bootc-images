@@ -62,7 +62,10 @@ RUN dnf install -y --releasever=9 --installroot=/tmp/ros-install ros-kilted-desk
     lttng-ust \
     python3-typing-extensions \
     python3-numpy \
-    python3-packaging && \
+    python3-packaging \
+    python3-psutil \
+    python3-lark-parser \
+    console-bridge-devel && \
     dnf clean all
 
 # Move ROS from /opt to /usr/local and create symlinks if needed
