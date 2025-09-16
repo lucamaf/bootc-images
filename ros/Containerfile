@@ -56,7 +56,7 @@ EOF
 #    flake8-class-newline \
 #    flake8-deprecated 
 
-# Install dependencies
+# Install additional dependencies
 RUN dnf install -y \
     spdlog-devel \
     lttng-ust \
