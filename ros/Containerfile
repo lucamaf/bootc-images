@@ -37,7 +37,7 @@ EOF
 
 
 # Install dev packages
-RUN dnf cmake \
+RUN dnf install -y cmake \
     gcc-c++ \
     git \
     make \
