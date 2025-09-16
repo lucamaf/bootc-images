@@ -57,4 +57,3 @@ ENV PYTHONPATH="${ROS_ROOT}/lib/python3.9/site-packages:${PYTHONPATH}"
 
 # Source ROS setup in bashrc for interactive shells
 RUN echo "source /usr/local/ros/kilted/setup.bash" >> /etc/bashrc
-
