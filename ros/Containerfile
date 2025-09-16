@@ -3,9 +3,10 @@ FROM registry.redhat.io/rhel9/rhel-bootc:9.6
 ENV LANG=en_US.UTF-8
 
 # Package dependencies for building
-RUN dnf install -y curl dnf-plugins-core langpacks-en glibc-langpack-en 'dnf-command(config-manager)' \
-    https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(rpm -E %rhel).noarch.rpm  && \
-    crb enable && \
+RUN dnf install -y curl dnf-plugins-core langpacks-en glibc-langpack-en \
+    'dnf-command(config-manager)' \
+    https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(rpm -E %rhel).noarch.rpm && \
+    dnf config-manager --set-enabled codeready-builder-for-rhel-$(rpm -E %rhel)-$(arch)-rpms && \
     dnf clean all
 
 RUN dnf install -y "https://github.com/ros-infrastructure/ros-apt-source/releases/download/$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}')/ros2-release-$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}')-1.noarch.rpm"
@@ -31,3 +32,4 @@ ENV PYTHONPATH="${ROS_ROOT}/lib/python3.9/site-packages:${PYTHONPATH}"
 
 # Source ROS setup in bashrc for interactive shells
 RUN echo "source /usr/local/ros/kilted/setup.bash" >> /etc/bashrc
+
