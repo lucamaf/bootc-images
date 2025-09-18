@@ -1,0 +1,75 @@
+FROM registry.redhat.io/rhel9/rhel-bootc:9.6
+
+# Install system dependencies
+RUN dnf install -y python3-pip python3 curl git gnupg2 cmake \
+    https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(rpm -E %rhel).noarch.rpm && \
+    dnf config-manager --set-enabled codeready-builder-for-rhel-$(rpm -E %rhel)-$(arch)-rpms && \
+    dnf clean all
+
+# Create and activate Python virtual environment for build tools
+RUN python3 -m venv /opt/vcs_colcon_installation
+ENV PATH="/opt/vcs_colcon_installation/bin:$PATH"
+RUN . /opt/vcs_colcon_installation/bin/activate && \
+    pip3 install vcstool colcon-common-extensions
+
+# Create workspace and get Gazebo sources
+WORKDIR /opt/workspace
+RUN mkdir -p src && \
+    cd src && \
+    curl -O https://raw.githubusercontent.com/gazebo-tooling/gazebodistro/master/collection-ionic.yaml && \
+    . /opt/vcs_colcon_installation/bin/activate && \
+    vcs import < collection-ionic.yaml
+
+# Add Gazebo repository
+RUN curl https://packages.osrfoundation.org/gazebo.gpg --output /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
+    tee /etc/yum.repos.d/gazebo-stable.repo > /dev/null <<EOF
+[gazebo-stable]
+name=gazebo-stable
+baseurl=http://packages.osrfoundation.org/gazebo/rhel-stable/9/\$basearch
+enabled=1
+gpgcheck=1
+gpgkey=file:///usr/share/keyrings/pkgs-osrf-archive-keyring.gpg
+EOF
+
+RUN dnf makecache
+
+# Install Gazebo dependencies from package files
+WORKDIR /opt/workspace/src
+RUN dnf install -y \
+    $(sort -u $(find . -iname 'packages-rhel*.rpm' -o -iname 'packages.rpm' 2>/dev/null | grep -v '/\.git/') | sed '/gz\|sdf/d' | tr '\n' ' ') || true
+
+# Install additional development dependencies
+RUN dnf install -y \
+    boost-devel \
+    eigen3-devel \
+    freeimage-devel \
+    protobuf-devel \
+    qt5-qtbase-devel \
+    tinyxml2-devel \
+    urdfdom-devel \
+    bullet-devel \
+    ogre-devel \
+    libcurl-devel
+
+# Build Gazebo libraries
+WORKDIR /opt/workspace
+RUN . /opt/vcs_colcon_installation/bin/activate && \
+    colcon build --cmake-args ' -DBUILD_TESTING=OFF' --merge-install
+
+# Set up environment for Gazebo
+RUN echo '. /opt/vcs_colcon_installation/bin/activate' >> /etc/profile.d/gazebo.sh && \
+    echo '. /opt/workspace/install/setup.bash' >> /etc/profile.d/gazebo.sh && \
+    chmod +x /etc/profile.d/gazebo.sh
+
+# Create a script to source the environment for users
+RUN echo '#!/bin/bash' > /usr/local/bin/setup-gazebo && \
+    echo '. /opt/vcs_colcon_installation/bin/activate' >> /usr/local/bin/setup-gazebo && \
+    echo '. /opt/workspace/install/setup.bash' >> /usr/local/bin/setup-gazebo && \
+    chmod +x /usr/local/bin/setup-gazebo
+
+# Clean up package cache to reduce image size
+RUN dnf clean all
+
+# Set default working directory
+WORKDIR /root
+
