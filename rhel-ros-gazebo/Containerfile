@@ -21,14 +21,12 @@ RUN mkdir -p src && \
     vcs import < collection-ionic.yaml
 
 # Add Gazebo repository
-RUN curl https://packages.osrfoundation.org/gazebo.gpg --output /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
-    tee /etc/yum.repos.d/gazebo-stable.repo > /dev/null <<EOF
+RUN tee /etc/yum.repos.d/gazebo-stable.repo > /dev/null <<EOF
 [gazebo-stable]
 name=gazebo-stable
 baseurl=http://packages.osrfoundation.org/gazebo/rhel-stable/9/\$basearch
 enabled=1
-gpgcheck=1
-gpgkey=file:///usr/share/keyrings/pkgs-osrf-archive-keyring.gpg
+gpgcheck=0
 EOF
 
 RUN dnf makecache
