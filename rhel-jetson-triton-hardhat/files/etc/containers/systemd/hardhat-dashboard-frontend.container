@@ -11,7 +11,10 @@ Network=host
 Environment=BACKEND_API_BASE_URL=http://localhost:5005
 
 [Service]
+ExecStartPre=/bin/sleep 10
 Restart=always
+TimeoutStartSec=900
+RestartSec=30
 
 [Install]
 WantedBy=default.target

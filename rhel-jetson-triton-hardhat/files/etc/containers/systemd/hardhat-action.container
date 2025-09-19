@@ -16,7 +16,10 @@ Environment=RESET_CHECKS=3
 Environment=ALIVE_INTERVAL=5
 
 [Service]
+ExecStartPre=/bin/sleep 10
 Restart=always
+TimeoutStartSec=900
+RestartSec=30
 
 [Install]
 WantedBy=default.target

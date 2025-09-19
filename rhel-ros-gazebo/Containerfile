@@ -1,7 +1,7 @@
-FROM registry.redhat.io/rhel9/rhel-bootc:9.6
+FROM ghcr.io/luisarizmendi/bootc-rhel-ros:latest
 
 # Install system dependencies
-RUN dnf install -y python3-pip python3 curl git gnupg2 cmake \
+RUN dnf install -y python3-pip python3 curl git gnupg2 cmake python3-rosdep \
     https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(rpm -E %rhel).noarch.rpm && \
     dnf config-manager --set-enabled codeready-builder-for-rhel-$(rpm -E %rhel)-$(arch)-rpms && \
     dnf clean all
@@ -20,21 +20,15 @@ RUN mkdir -p src && \
     . /opt/vcs_colcon_installation/bin/activate && \
     vcs import < collection-ionic.yaml
 
-# Add Gazebo repository
-RUN tee /etc/yum.repos.d/gazebo-stable.repo > /dev/null <<EOF
-[gazebo-stable]
-name=gazebo-stable
-baseurl=http://packages.osrfoundation.org/gazebo/rhel-stable/9/\$basearch
-enabled=1
-gpgcheck=0
-EOF
+# Initialize rosdep (must be done after installing rosdep)
+RUN rosdep init || echo "rosdep already initialized" && \
+    rosdep update
 
-RUN dnf makecache
-
-# Install Gazebo dependencies from package files
+# Install Gazebo dependencies using rosdep
 WORKDIR /opt/workspace/src
-RUN dnf install -y \
-    $(sort -u $(find . -iname 'packages-rhel*.rpm' -o -iname 'packages.rpm' 2>/dev/null | grep -v '/\.git/') | sed '/gz\|sdf/d' | tr '\n' ' ') || true
+RUN rosdep install -i --from-path . -y \
+    --skip-keys "gz-cmake3 DART libogre-dev libogre-next-2.3-dev" \
+    --os=rhel:9 || echo "Some rosdep packages may have failed, continuing with manual dependencies"
 
 # Install additional development dependencies
 RUN dnf install -y \
@@ -46,8 +40,17 @@ RUN dnf install -y \
     tinyxml2-devel \
     urdfdom-devel \
     bullet-devel \
-    ogre-devel \
-    libcurl-devel
+    libcurl-devel \
+    libuuid-devel \
+    gdal-devel \
+    ffmpeg-devel \
+    assimp-devel \
+    swig \
+    python3-devel && \
+    # Try to install OGRE if available, otherwise continue
+    dnf install -y OGRE-devel || \
+    dnf install -y ogre1.9-devel || \
+    echo "OGRE development package not found, Gazebo will build without OGRE rendering support"
 
 # Build Gazebo libraries
 WORKDIR /opt/workspace
@@ -70,4 +73,3 @@ RUN dnf clean all
 
 # Set default working directory
 WORKDIR /root
-
