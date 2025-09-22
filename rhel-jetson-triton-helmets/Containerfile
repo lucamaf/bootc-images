@@ -105,5 +105,5 @@ RUN chmod -R 600 /etc/NetworkManager/system-connections/ && \
     mkdir -p /etc/models
 
 # Pull model from OCI registry
-COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v1 /models/ /etc/models
-#COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v2 /models/ /etc/models
+#COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v1 /models/ /etc/models
+COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v2 /models/ /etc/models
