@@ -5,8 +5,9 @@ ENV LANG=en_US.UTF-8
 # Package dependencies for building (`sudo crb enable` does not work)
 RUN dnf install -y curl dnf-plugins-core langpacks-en glibc-langpack-en \
     'dnf-command(config-manager)' \
-    https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(rpm -E %rhel).noarch.rpm && \
-    dnf config-manager --set-enabled codeready-builder-for-rhel-$(rpm -E %rhel)-$(arch)-rpms && \
+    https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(rpm -E %rhel).noarch.rpm 
+
+RUN crb enable && \
     dnf clean all
 
 RUN dnf install -y "https://github.com/ros-infrastructure/ros-apt-source/releases/download/$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}')/ros2-release-$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}')-1.noarch.rpm"
