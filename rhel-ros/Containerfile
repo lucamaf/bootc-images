@@ -1,4 +1,4 @@
-# Multi-stage build to properly handle ROS installation in bootc
+# Multi-stage build to properly handle ROS installation in bootc (not using opt)
 FROM registry.redhat.io/rhel9/rhel-bootc:9.6 as ros-builder
 
 ENV LANG=en_US.UTF-8
