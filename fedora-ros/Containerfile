@@ -2,7 +2,7 @@ FROM quay.io/fedora/fedora-bootc:42
 
 # Include bootc-image-builder customization (mainly to include default rootfs)
 RUN mkdir -p /usr/lib/bootc/install  
-COPY rootfs.toml /usr/lib/bootc/install/10-rootfs.toml
+COPY builder-customizations.toml /usr/lib/bootc/install/10-custom-builder.toml
 
 ENV LANG=en_US.UTF-8
 
