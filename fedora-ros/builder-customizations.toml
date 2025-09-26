@@ -1,2 +1,2 @@
-   [filesystem]
-   root = "btrfs"
+[install.filesystem.root]
+type = "xfs"
