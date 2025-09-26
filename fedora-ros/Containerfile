@@ -4,8 +4,6 @@ FROM quay.io/fedora/fedora-bootc:42
 RUN mkdir -p /usr/lib/bootc/install  
 COPY builder-customizations.toml /usr/lib/bootc/install/10-custom-builder.toml
 
-ENV LANG=en_US.UTF-8
-
 # Package dependencies for building
 RUN dnf install -y curl dnf-plugins-core langpacks-en glibc-langpack-en \
     'dnf-command(config-manager)' && \
@@ -13,7 +11,7 @@ RUN dnf install -y curl dnf-plugins-core langpacks-en glibc-langpack-en \
 
 # Install dnf5 copr plugin and enable COPR repository for ROS2 on Fedora 42
 RUN dnf install -y 'dnf5-command(copr)' && \
-    dnf copr enable -y saypaul/ros2 && \
+    dnf copr enable -y tavie/ros2 && \
     dnf clean all
 
 # (OPTIONAL) Install dev packages
@@ -54,4 +52,4 @@ RUN dnf install -y \
 RUN dnf install -y  --use-host-config  ros-kilted-desktop  && \
     dnf clean all
 
-RUN echo "source /usr/local/ros/kilted/setup.bash" >> /etc/bashrc 
+RUN echo "source /usr/lib64/ros2-kilted/setup.bash" >> /etc/bashrc 
