@@ -7,8 +7,9 @@ RUN dnf install -y curl dnf-plugins-core langpacks-en glibc-langpack-en \
     'dnf-command(config-manager)' && \
     dnf clean all
 
-# Enable COPR repository for ROS2 on Fedora 42
-RUN dnf copr enable -y tavie/ros2 && \
+# Install dnf5 copr plugin and enable COPR repository for ROS2 on Fedora 42
+RUN dnf install -y 'dnf5-command(copr)' && \
+    dnf copr enable -y tavie/ros2 && \
     dnf clean all
 
 # (OPTIONAL) Install dev packages
