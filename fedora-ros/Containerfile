@@ -50,24 +50,7 @@ RUN dnf install -y \
     console-bridge-devel && \
     dnf clean all
 
-# Install ROS from COPR to a temporary location 
-RUN dnf install -y  --installroot=/tmp/ros-install --use-host-config  ros-kilted-desktop  && \
+# Install ROS from COPR
+RUN dnf install -y  --use-host-config  ros-kilted-desktop  && \
     dnf clean all
 
-# Move ROS from /opt to /usr/local and create symlinks if needed
-RUN if [ -d "/tmp/ros-install/opt/ros" ]; then \
-        mkdir -p /usr/local/ros && \
-        cp -r /tmp/ros-install/opt/ros/* /usr/local/ros/ && \
-        ln -sf /usr/local/ros /opt/ros; \
-    fi && \
-    rm -rf /tmp/ros-install
-
-# Update environment variables to point to new location
-ENV ROS_DISTRO=kilted
-ENV ROS_ROOT=/usr/local/ros/${ROS_DISTRO}
-ENV PATH="${ROS_ROOT}/bin:${PATH}"
-ENV LD_LIBRARY_PATH="${ROS_ROOT}/lib:${LD_LIBRARY_PATH}"
-
-# Source ROS setup in bashrc for interactive shells and set dynamic PYTHONPATH
-RUN echo "source /usr/local/ros/kilted/setup.bash" >> /etc/bashrc && \
-    echo 'export PYTHONPATH="${ROS_ROOT}/lib/$(python3 -c "import sys; print(f\"python{sys.version_info.major}.{sys.version_info.minor}\")")/site-packages:${PYTHONPATH}"' >> /etc/bashrc
