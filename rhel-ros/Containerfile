@@ -50,16 +50,6 @@ RUN dnf install -y \
 RUN dnf install -y --releasever=9 ros-kilted-desktop && \
     dnf clean all
 
-# Copy ROS installation from builder stage to /usr/local/ros
-RUN mkdir -p /usr/local/ros
-COPY /opt /usr/local
-
-# Create compatibility symlink so software looking for /opt/ros still works
-RUN ln -sf /usr/local/ros /opt/ros
-
-# Source ROS setup in bashrc for interactive shells and set dynamic PYTHONPATH
-RUN echo "source /usr/local/ros/kilted/setup.bash" >> /etc/bashrc 
-
 # (OPTIONAL) Uncomment if you need dev packages
 #RUN dnf install -y cmake \
 #    gcc-c++ \
