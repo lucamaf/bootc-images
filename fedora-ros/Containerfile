@@ -1,5 +1,8 @@
 FROM quay.io/fedora/fedora-bootc:42
 
+# Declare root filesystem type for bootc-image-builder
+LABEL "bootc.filesystem.root"="ext4"
+
 ENV LANG=en_US.UTF-8
 
 # Package dependencies for building
