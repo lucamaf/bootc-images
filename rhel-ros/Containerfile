@@ -1,8 +1,6 @@
 # Multi-stage build to properly handle ROS installation in bootc (not using opt)
 FROM registry.redhat.io/rhel9/rhel-bootc:9.6 as ros-builder
 
-ENV LANG=en_US.UTF-8
-
 # Package dependencies for building (`sudo crb enable` does not work)
 RUN dnf install -y curl dnf-plugins-core langpacks-en glibc-langpack-en \
     'dnf-command(config-manager)' \
@@ -58,8 +56,6 @@ RUN dnf install -y --releasever=9 ros-kilted-desktop && \
 ####################################################################################################################3
 # Final stage - create the bootc image
 FROM registry.redhat.io/rhel9/rhel-bootc:9.6
-
-ENV LANG=en_US.UTF-8
 
 # Install basic dependencies (without ROS-specific stuff)
 RUN dnf install -y curl dnf-plugins-core langpacks-en glibc-langpack-en \
@@ -118,16 +114,8 @@ COPY --from=ros-builder /opt/ros /usr/local/ros
 # Create compatibility symlink so software looking for /opt/ros still works
 RUN ln -sf /usr/local/ros /opt/ros
 
-# Set ROS environment variables
-ENV ROS_DISTRO=kilted
-ENV ROS_ROOT=/usr/local/ros/${ROS_DISTRO}
-ENV PATH="${ROS_ROOT}/bin:${PATH}"
-ENV LD_LIBRARY_PATH="${ROS_ROOT}/lib:${LD_LIBRARY_PATH}"
-
 # Source ROS setup in bashrc for interactive shells and set dynamic PYTHONPATH
-RUN echo "source /usr/local/ros/kilted/setup.bash" >> /etc/bashrc && \
-    echo "export PYTHONPATH=\"${ROS_ROOT}/lib/\$(python3 -c \"import sys; print(f\\\"python{sys.version_info.major}.{sys.version_info.minor}\\\")\")/site-packages:\${PYTHONPATH}\"" >> /etc/bashrc
-
+RUN echo "source /usr/local/ros/kilted/setup.bash" >> /etc/bashrc 
 
 # (OPTIONAL) Uncomment if you need dev packages
 #RUN dnf install -y cmake \
