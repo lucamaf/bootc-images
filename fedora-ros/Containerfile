@@ -12,7 +12,7 @@ RUN dnf install -y 'dnf5-command(copr)' && \
     dnf copr enable -y tavie/ros2 && \
     dnf clean all
 
-# (OPTIONAL) Install dev packages
+# OPTIONAL: Install dev packages
 #RUN dnf install -y cmake \
 #    gcc-c++ \
 #    git \
