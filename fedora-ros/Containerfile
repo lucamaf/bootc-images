@@ -47,7 +47,7 @@ RUN dnf install -y \
     dnf clean all
 
 # Install ROS from COPR to a temporary location 
-RUN dnf install -y  --installroot=/tmp/ros-install ros-kilted-desktop  && \
+RUN dnf install -y  --installroot=/tmp/ros-install --use-host-config  ros-kilted-desktop  && \
     dnf clean all
 
 # Move ROS from /opt to /usr/local and create symlinks if needed
