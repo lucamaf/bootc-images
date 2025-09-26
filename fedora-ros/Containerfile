@@ -66,9 +66,7 @@ ENV ROS_DISTRO=kilted
 ENV ROS_ROOT=/usr/local/ros/${ROS_DISTRO}
 ENV PATH="${ROS_ROOT}/bin:${PATH}"
 ENV LD_LIBRARY_PATH="${ROS_ROOT}/lib:${LD_LIBRARY_PATH}"
-ENV PYTHONPATH="${ROS_ROOT}/lib/python3.9/site-packages:${PYTHONPATH}"
 
-# Source ROS setup in bashrc for interactive shells
-RUN echo "source /usr/local/ros/kilted/setup.bash" >> /etc/bashrc
-
-
+# Source ROS setup in bashrc for interactive shells and set dynamic PYTHONPATH
+RUN echo "source /usr/local/ros/kilted/setup.bash" >> /etc/bashrc && \
+    echo 'export PYTHONPATH="${ROS_ROOT}/lib/$(python3 -c "import sys; print(f\"python{sys.version_info.major}.{sys.version_info.minor}\")")/site-packages:${PYTHONPATH}"' >> /etc/bashrc
