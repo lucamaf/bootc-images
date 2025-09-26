@@ -13,10 +13,10 @@ RUN dnf install -y curl dnf-plugins-core langpacks-en glibc-langpack-en \
 
 # Install dnf5 copr plugin and enable COPR repository for ROS2 on Fedora 42
 RUN dnf install -y 'dnf5-command(copr)' && \
-    dnf copr enable -y tavie/ros2 && \
+    dnf copr enable -y saypaul/ros2 && \
     dnf clean all
 
-# (OPTIONAL) Install dev packages 
+# (OPTIONAL) Install dev packages
 #RUN dnf install -y cmake \
 #    gcc-c++ \
 #    git \
@@ -50,7 +50,8 @@ RUN dnf install -y \
     console-bridge-devel && \
     dnf clean all
 
-# Install ROS from COPR
+# Install ROS from COPR to a temporary location 
 RUN dnf install -y  --use-host-config  ros-kilted-desktop  && \
     dnf clean all
 
+RUN echo "source /usr/local/ros/kilted/setup.bash" >> /etc/bashrc 
