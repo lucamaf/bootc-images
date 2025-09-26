@@ -50,6 +50,9 @@ RUN dnf install -y \
 RUN dnf install -y --releasever=9 ros-kilted-desktop && \
     dnf clean all
 
+RUN echo "source /opt/ros/kilted/setup.bash" >> /etc/bashrc 
+
+    
 # (OPTIONAL) Uncomment if you need dev packages
 #RUN dnf install -y cmake \
 #    gcc-c++ \
