@@ -1,0 +1,30 @@
+[Unit]
+Description=MQTT Broker Container
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+PodmanArgs=--privileged
+Image=docker.io/library/eclipse-mosquitto:latest
+ContainerName=my-broker
+
+# NET
+Network=host
+
+# Volume and mount configuration
+Volume=/home/admin/ppe-hmi-demo/mosquitto/log:/mosquitto/log
+Volume=/home/admin/ppe-hmi-demo/mosquitto/data:/mosquitto/log
+Volume=/home/admin/ppe-hmi-demo/mosquitto/config:/mosquitto/config
+
+
+# Environment variables
+Environment=PORT=1883
+
+[Service]
+ExecStartPre=/bin/sleep 10
+Restart=always
+TimeoutStartSec=900
+RestartSec=30
+
+[Install]
+WantedBy=default.target
