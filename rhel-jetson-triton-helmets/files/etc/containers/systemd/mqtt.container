@@ -13,7 +13,7 @@ Network=host
 
 # Volume and mount configuration
 Volume=/home/admin/ppe-hmi-demo/mosquitto/log:/mosquitto/log
-Volume=/home/admin/ppe-hmi-demo/mosquitto/data:/mosquitto/log
+Volume=/home/admin/ppe-hmi-demo/mosquitto/data:/mosquitto/data
 Volume=/home/admin/ppe-hmi-demo/mosquitto/config:/mosquitto/config
 
 
