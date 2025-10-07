@@ -5,12 +5,12 @@ autoconnect=true
 interface-name=wlP1p1s0
 
 [wifi]
-ssid=YOUR_WIFI_NAME
+ssid=vodafone9A56_5G
 mode=infrastructure
 
 [wifi-security]
 key-mgmt=wpa-psk
-psk=YOUR_WIFI_PASSWORD
+psk=MyHomeWiFi16!
 
 [ipv4]
 method=auto
