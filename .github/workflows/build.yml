@@ -6,7 +6,7 @@ on:
       platforms:
         description: 'Platforms to build (comma-separated)'
         required: true
-        default: 'linux/arm64'
+        default: 'linux/arm64, linux/amd64'
       formats:
         description: 'Export formats (comma-separated)'
         required: true

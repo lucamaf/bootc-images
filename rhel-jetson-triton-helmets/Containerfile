@@ -90,12 +90,12 @@ EOF
 
 ########### CUSTOMIZATIONS ###########
 ## adding podman-compose, NetworkManager wifi, iwlwifi firmware, python3-pip, cockpit packages
+## https://docs.fedoraproject.org/en-US/fedora-coreos/sysconfig-enabling-wifi/
  RUN dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm && \
-     dnf -y install pciutils usbutils python3-pip podman-compose NetworkManager-wifi iwl* cockpit cockpit-podman && \
+     dnf -y install pciutils usbutils python3-pip podman-compose NetworkManager-wifi iwl* git vim && \
      dnf -y clean all && \
      rm -rf /var/{cache,log} /var/lib/{dnf,rhsm} && \
-     systemctl enable podman.service && \
-     systemctl enable cockpit.socket
+     systemctl enable podman.service
 
 
 ### Copy files
