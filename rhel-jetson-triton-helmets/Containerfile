@@ -116,6 +116,10 @@ RUN systemctl enable tailscaled
 #COPY tailscale-login.service /etc/systemd/system/tailscale-login.service
 RUN systemctl enable tailscale-login.service
 
+# install git lfs to upload large model files to github repo
+RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.rpm.sh | bash && \
+    dnf -y install git-lfs 
+
 # Pull model from OCI registry
 #COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v1 /models/ /etc/models
 #COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v2 /models/ /etc/models
