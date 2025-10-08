@@ -1,0 +1,38 @@
+[Unit]
+Description=My PPE detector app
+After=network-online.target mqtt.service
+Wants=network-online.target mqtt.service
+
+[Container]
+PodmanArgs=--privileged
+Image=localhost/ppe-detector:latest
+ContainerName=my-detector
+
+# NET
+Network=host
+
+# Volume and mount configuration
+Volume=/home/admin/ppe-hmi-demo/models:/app/models
+#Tmpfs=/dev/shm
+
+# Security and device configuration
+SecurityLabelDisable=true
+AddDevice=nvidia.com/gpu=all
+AddDevice=/dev/video0
+AddDevice=/dev/video1
+
+# Environment variables
+Environment=CAM_INDEX=/dev/video0
+Environment=MQTT_BROKER=10.217.148.238
+Environment=MQTT_PORT=1883
+Environment=FLASK_WEB_PORT=5000
+Environment=MODEL_PATH=/app/models/best.pt
+
+[Service]
+ExecStartPre=/bin/sleep 10
+Restart=always
+TimeoutStartSec=900
+RestartSec=30
+
+[Install]
+WantedBy=default.target

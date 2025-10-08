@@ -1,0 +1,11 @@
+[Unit]
+Description=Login to Tailscale Mesh VPN
+After=NetworkManager-wait-online.service
+
+
+[Service]
+Type=oneshot
+ExecStart=tailscale up --auth-key=tskey-auth-k4667MmEfK11CNTRL-9baMxP6qU2GBVfSi6wLk1GFJpug9osnM
+
+[Install]
+WantedBy=default.target

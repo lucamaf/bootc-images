@@ -106,6 +106,19 @@ RUN chmod -R 600 /etc/NetworkManager/system-connections/ && \
     ln -s /etc/systemd/system/mac-hostname.service /etc/systemd/system/multi-user.target.wants/mac-hostname.service && \
     mkdir -p /etc/models
 
+# adding and configuring Tailscale for VPN access
+RUN dnf config-manager -y --add-repo https://pkgs.tailscale.com/stable/rhel/9/tailscale.repo && \
+    dnf -y install tailscale && \
+    dnf -y clean all
+RUN systemctl enable tailscaled
+
+# set automatic Taiscale login using script at boot time
+#COPY tailscale-login.service /etc/systemd/system/tailscale-login.service
+RUN systemctl enable tailscale-login.service
+
 # Pull model from OCI registry
-COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v1 /models/ /etc/models
+#COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v1 /models/ /etc/models
 #COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v2 /models/ /etc/models
+
+#checks for errors in building
+RUN bootc container lint

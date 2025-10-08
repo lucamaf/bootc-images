@@ -1,16 +1,16 @@
 [connection]
-id=wifi-pixel
+id=wifi-summit-connect
 type=wifi
 autoconnect=true
 interface-name=wlP1p1s0
 
 [wifi]
-ssid=Pixel-6-Pro
+ssid=Summit Connect Sponsor
 mode=infrastructure
 
 [wifi-security]
 key-mgmt=wpa-psk
-psk=MyHomeWiFi16!
+psk=Summit 2025
 
 [ipv4]
 method=auto
