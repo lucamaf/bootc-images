@@ -140,6 +140,9 @@ RUN dnf install -y \
     flightctl-cli \
     && dnf clean all
 
+# test aarch64 rpms
+RUN dnf config-manager --set-enabled edge-manager-1.1-for-rhel-9-$(uname -m)-rpms
+
 # Enable agent
 RUN systemctl enable flightctl-agent.service
 
