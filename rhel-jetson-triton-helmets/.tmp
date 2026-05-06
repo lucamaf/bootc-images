@@ -107,30 +107,9 @@ RUN chmod -R 600 /etc/NetworkManager/system-connections/ && \
     ln -s /etc/systemd/system/mac-hostname.service /etc/systemd/system/multi-user.target.wants/mac-hostname.service && \
     mkdir -p /etc/models
 
-# adding and configuring Tailscale for VPN access
-RUN dnf config-manager -y --add-repo https://pkgs.tailscale.com/stable/rhel/9/tailscale.repo && \
-    dnf -y install tailscale && \
-    dnf -y clean all
-RUN systemctl enable tailscaled
 
-# set automatic Taiscale login using script at boot time
-#COPY tailscale-login.service /etc/systemd/system/tailscale-login.service
-RUN systemctl enable tailscale-login.service
-
-# install git lfs to upload large model files to github repo
-#RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.rpm.sh | bash && \
-#    dnf -y install git-lfs && \
-#    dnf -y clean all
-
-# Pull model from OCI registry
-#COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v1 /models/ /etc/models
-#COPY --from=quay.io/luisarizmendi/modelcar-hardhat:v2 /models/ /etc/models
-
-# enable tailscale port 
-RUN firewall-offline-cmd --add-port=41641/udp
-
-# Flightctl CLI and agent
-RUN dnf config-manager --add-repo https://rpm.flightctl.io/flightctl-epel.repo
+# Edge manager agent install
+RUN dnf config-manager --set-enabled edge-manager-1.0-for-rhel-9-$(uname -m)-rpms
 RUN dnf install -y \
     flightctl-agent \
     flightctl-cli \
